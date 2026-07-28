@@ -528,21 +528,29 @@ function RankBadge({ tierIndex, size = 190 }) {
 }
 function Confetti({ show }) {
   if (!show) return null;
-  return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, pointerEvents: "none", zIndex: 60 } }, Array.from({ length: 28 }).map((_, i) => {
-    const left = Math.random() * 100, delay = Math.random() * 0.4, dur = 1.6 + Math.random() * 1.2;
-    const col = ["#f2cf5b", "#6fe0cf", "#c39bff", "#c47a44"][i % 4];
+  return /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, pointerEvents: "none", zIndex: 90 } }, Array.from({ length: 36 }).map((_, i) => {
+    const left = Math.random() * 100, delay = Math.random() * 0.5, dur = 1.8 + Math.random() * 1.4;
+    const col = ["#f2cf5b", "#6fa8ff", "#ece3d8", "#c99a2e"][i % 4];
+    const w = 6 + Math.random() * 6;
     return /* @__PURE__ */ React.createElement("span", { key: i, style: {
       position: "absolute",
       left: `${left}%`,
       top: "-5%",
-      width: 9,
-      height: 14,
+      width: w,
+      height: w * 1.6,
       background: col,
       borderRadius: 2,
       opacity: 0.9,
+      transform: `rotate(${Math.random() * 360}deg)`,
       animation: `fall ${dur}s ${delay}s ease-in forwards`
     } });
   }));
+}
+function PromotionScreen({ promo, onClose }) {
+  if (!promo) return null;
+  const t = TIERS[promo.tierIndex];
+  const isTierUp = promo.isTierUp;
+  return /* @__PURE__ */ React.createElement("div", { style: S.promoBg, onClick: onClose }, /* @__PURE__ */ React.createElement("div", { style: S.promoInner, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { style: { ...S.promoLabel, color: t.glow } }, isTierUp ? "NOUVEAU PALIER" : "PROMOTION"), /* @__PURE__ */ React.createElement("div", { className: "promo-badge-anim", style: { filter: `drop-shadow(0 0 30px ${t.glow}66)` } }, /* @__PURE__ */ React.createElement(RankBadge, { tierIndex: promo.tierIndex, size: 210 })), /* @__PURE__ */ React.createElement("div", { style: { ...S.promoTier, color: t.glow } }, t.name, promo.division ? ` ${promo.division}` : ""), /* @__PURE__ */ React.createElement("div", { style: S.promoSub }, isTierUp ? "Tu franchis un cap. Ta ma\xEEtrise change de dimension." : "Une division de plus. Continue de grimper."), /* @__PURE__ */ React.createElement("button", { style: { ...S.promoBtn, borderColor: t.glow, color: t.glow }, onClick: onClose }, "Continuer")));
 }
 function QuestEditor({ quest, onSave, onClose, onDelete }) {
   const [nom, setNom] = useState(quest.nom || "");
@@ -599,11 +607,14 @@ function AtelierRank() {
   const [done, setDone] = useState({});
   const [bonusLp, setBonusLp] = useState(0);
   const [defi, setDefi] = useState(null);
-  const [celebrate, setCelebrate] = useState(false);
+  const [promo, setPromo] = useState(null);
+  const [confetti, setConfetti] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [tab, setTab] = useState("all");
   const [editMode, setEditMode] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [flyers, setFlyers] = useState([]);
+  const [justId, setJustId] = useState(null);
   useEffect(() => {
     try {
       const rawQ = localStorage.getItem(KEY_QUESTS);
@@ -642,6 +653,22 @@ function AtelierRank() {
   const prevRankRef = React.useRef(null);
   useEffect(() => {
     if (!loaded) return;
+    const cur = { tierIndex: rank.tierIndex, division: rank.division };
+    const prev = prevRankRef.current;
+    prevRankRef.current = cur;
+    if (!prev) return;
+    const divRank = (d) => d === null ? 4 : ["IV", "III", "II", "I"].indexOf(d);
+    const went = cur.tierIndex > prev.tierIndex || cur.tierIndex === prev.tierIndex && divRank(cur.division) > divRank(prev.division);
+    if (went) {
+      const isTierUp = cur.tierIndex > prev.tierIndex;
+      setPromo({ tierIndex: cur.tierIndex, division: cur.division, isTierUp });
+      setConfetti(true);
+      const to = setTimeout(() => setConfetti(false), 3200);
+      return () => clearTimeout(to);
+    }
+  }, [rank.tierIndex, rank.division, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
     try {
       localStorage.setItem(KEY_PROGRESS, JSON.stringify({ done, bonusLp }));
     } catch (e) {
@@ -655,20 +682,22 @@ function AtelierRank() {
     } catch (e) {
     }
   }, [quests, loaded]);
-  useEffect(() => {
-    if (!loaded) return;
-    const sig = `${rank.tierIndex}-${rank.division}`;
-    if (prevRankRef.current && prevRankRef.current !== sig) {
-      setCelebrate(true);
-      const to = setTimeout(() => setCelebrate(false), 2600);
-      return () => clearTimeout(to);
-    }
-    prevRankRef.current = sig;
-  }, [rank.tierIndex, rank.division, loaded]);
-  const toggle = useCallback((id) => {
+  const toggle = useCallback((id, ev) => {
     if (editMode) return;
+    const wasDone = !!done[id];
     setDone((d) => ({ ...d, [id]: !d[id] }));
-  }, [editMode]);
+    if (!wasDone) {
+      const q = quests.find((x) => x.id === id);
+      setJustId(id);
+      setTimeout(() => setJustId((c) => c === id ? null : c), 500);
+      if (q && ev) {
+        const x = ev.clientX || 0, y = ev.clientY || 0;
+        const fid = Date.now() + Math.random();
+        setFlyers((f) => [...f, { id: fid, x, y, lp: q.lp }]);
+        setTimeout(() => setFlyers((f) => f.filter((z) => z.id !== fid)), 1e3);
+      }
+    }
+  }, [editMode, done, quests]);
   const rollDefi = () => {
     const d = DEFIS[Math.floor(Math.random() * DEFIS.length)];
     setDefi(d);
@@ -679,6 +708,7 @@ function AtelierRank() {
       setDone({});
       setBonusLp(0);
       setDefi(null);
+      setPromo(null);
       prevRankRef.current = null;
     }
   };
@@ -706,7 +736,7 @@ function AtelierRank() {
   const shown = quests.filter((q) => tab === "all" || q.type === tab);
   const globalPct = totalPossible ? Math.round(questLp / totalPossible * 100) : 0;
   const doneCount = quests.filter((q) => done[q.id]).length;
-  return /* @__PURE__ */ React.createElement("div", { style: S.root }, /* @__PURE__ */ React.createElement("style", null, CSS), /* @__PURE__ */ React.createElement(Confetti, { show: celebrate }), editing && /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { style: S.root, className: "sr-root" }, /* @__PURE__ */ React.createElement("style", null, CSS), /* @__PURE__ */ React.createElement(Confetti, { show: confetti }), /* @__PURE__ */ React.createElement(PromotionScreen, { promo, onClose: () => setPromo(null) }), editing && /* @__PURE__ */ React.createElement(
     QuestEditor,
     {
       quest: editing,
@@ -714,43 +744,77 @@ function AtelierRank() {
       onClose: () => setEditing(null),
       onDelete: deleteQuest
     }
-  ), /* @__PURE__ */ React.createElement("header", { style: S.head }, /* @__PURE__ */ React.createElement("div", { style: S.brand }, /* @__PURE__ */ React.createElement("div", { style: S.logoBox }, /* @__PURE__ */ React.createElement(DandyLogo, { size: 40 })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: S.eyebrow }, "DANDYMTP"), /* @__PURE__ */ React.createElement("h1", { style: S.h1 }, "SEW RUSH"), /* @__PURE__ */ React.createElement("p", { style: S.sub }, "Fais grimper ta ma\xEEtrise couture, division apr\xE8s division."))), /* @__PURE__ */ React.createElement("div", { style: S.headBtns }, /* @__PURE__ */ React.createElement(
+  ), /* @__PURE__ */ React.createElement("header", { style: S.head }, /* @__PURE__ */ React.createElement("div", { style: S.brand }, /* @__PURE__ */ React.createElement("div", { style: S.logoBox }, /* @__PURE__ */ React.createElement(DandyLogo, { size: 40 })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: S.eyebrow }, "DANDYMTP"), /* @__PURE__ */ React.createElement("h1", { style: S.h1, className: "sr-h1" }, "SEW RUSH"), /* @__PURE__ */ React.createElement("p", { style: S.sub }, "Fais grimper ta ma\xEEtrise couture, division apr\xE8s division."))), /* @__PURE__ */ React.createElement("div", { style: S.headBtns }, /* @__PURE__ */ React.createElement(
     "button",
     {
       style: { ...S.reset, ...editMode ? S.editOn : {} },
       onClick: () => setEditMode((v) => !v)
     },
     editMode ? "\u2713 Terminer l'\xE9dition" : "\u270E \xC9diter"
-  ), /* @__PURE__ */ React.createElement("button", { style: S.reset, onClick: reset }, "R\xE9initialiser"))), /* @__PURE__ */ React.createElement("section", { style: { ...S.rankCard, boxShadow: `0 0 60px -20px ${t.glow}` } }, /* @__PURE__ */ React.createElement("div", { style: S.badgeWrap, className: "floaty" }, /* @__PURE__ */ React.createElement(RankBadge, { tierIndex: rank.tierIndex })), /* @__PURE__ */ React.createElement("div", { style: S.rankInfo }, /* @__PURE__ */ React.createElement("div", { style: { ...S.tierName, color: t.glow } }, t.name, !isTop && /* @__PURE__ */ React.createElement("span", { style: S.div }, " ", rank.division)), /* @__PURE__ */ React.createElement("div", { style: S.lpRow }, /* @__PURE__ */ React.createElement("div", { style: S.lpBarBg }, /* @__PURE__ */ React.createElement("div", { style: { ...S.lpBarFill, width: `${pct}%`, background: `linear-gradient(90deg, ${t.metal}, ${t.glow})` } })), /* @__PURE__ */ React.createElement("div", { style: S.lpText }, isTop ? `${rank.topLp} LP` : `${rank.lpInDivision} / ${LP_PER_DIVISION} LP`)), /* @__PURE__ */ React.createElement("div", { style: S.totalLine }, totalLp, " LP au total \xB7 ma\xEEtrise globale ", globalPct, "%"), /* @__PURE__ */ React.createElement("div", { style: S.ladder }, TIERS.map((ti, i) => /* @__PURE__ */ React.createElement("div", { key: ti.key, title: ti.name, style: {
+  ), /* @__PURE__ */ React.createElement("button", { style: S.reset, onClick: reset }, "R\xE9initialiser"))), /* @__PURE__ */ React.createElement("section", { style: { ...S.rankCard, boxShadow: `0 0 60px -20px ${t.glow}` }, className: "sr-rankcard" }, /* @__PURE__ */ React.createElement("div", { style: S.badgeWrap, className: "floaty sr-badge" }, /* @__PURE__ */ React.createElement(RankBadge, { tierIndex: rank.tierIndex })), /* @__PURE__ */ React.createElement("div", { style: S.rankInfo, className: "sr-rankinfo" }, /* @__PURE__ */ React.createElement("div", { style: { ...S.tierName, color: t.glow }, className: "sr-tier" }, t.name, !isTop && /* @__PURE__ */ React.createElement("span", { style: S.div }, " ", rank.division)), /* @__PURE__ */ React.createElement("div", { style: S.lpRow, className: "sr-lprow" }, /* @__PURE__ */ React.createElement("div", { style: S.lpBarBg }, /* @__PURE__ */ React.createElement("div", { className: "lp-fill", style: { ...S.lpBarFill, width: `${pct}%`, background: `linear-gradient(90deg, ${t.metal}, ${t.glow})` } })), /* @__PURE__ */ React.createElement("div", { style: S.lpText }, isTop ? `${rank.topLp} LP` : `${rank.lpInDivision} / ${LP_PER_DIVISION} LP`)), /* @__PURE__ */ React.createElement("div", { style: S.totalLine }, totalLp, " LP au total \xB7 ma\xEEtrise globale ", globalPct, "%"), /* @__PURE__ */ React.createElement("div", { style: S.ladder, className: "sr-ladder" }, TIERS.map((ti, i) => /* @__PURE__ */ React.createElement("div", { key: ti.key, title: ti.name, style: {
     ...S.ladderDot,
     background: i <= rank.tierIndex ? ti.glow : "#2a2320",
     boxShadow: i === rank.tierIndex ? `0 0 10px ${ti.glow}` : "none",
     transform: i === rank.tierIndex ? "scale(1.35)" : "scale(1)"
-  } }))))), /* @__PURE__ */ React.createElement("section", { style: S.defiCard }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: S.defiLabel }, "D\xE9fi d'atelier"), /* @__PURE__ */ React.createElement("div", { style: S.defiTxt }, defi ? /* @__PURE__ */ React.createElement("span", { style: { color: defi.good ? "#6fe0cf" : "#e08a6f" } }, defi.txt, " \xB7 ", defi.lp > 0 ? "+" : "", defi.lp, " LP") : "Tire un \xE9v\xE9nement al\xE9atoire de ta session couture.")), /* @__PURE__ */ React.createElement("button", { style: S.rollBtn, onClick: rollDefi }, "Lancer")), /* @__PURE__ */ React.createElement("div", { style: S.toolbar }, /* @__PURE__ */ React.createElement("div", { style: S.tabs }, [["all", "Tout"], ["technique", "Techniques"], ["projet", "Projets"], ["dandy", "Dandy"]].map(([k, l]) => /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => setTab(k), style: { ...S.tab, ...tab === k ? S.tabActive : {} } }, l))), editMode && /* @__PURE__ */ React.createElement("button", { style: S.addBtn, onClick: openNew }, "+ Ajouter une qu\xEAte")), editMode && /* @__PURE__ */ React.createElement("div", { style: S.editHint }, "Mode \xE9dition : touche une carte pour la modifier, ou ajoute-en une nouvelle. Termine l'\xE9dition pour recommencer \xE0 cocher."), /* @__PURE__ */ React.createElement("section", { style: S.grid }, shown.map((q) => {
+  } }))))), /* @__PURE__ */ React.createElement("section", { style: S.defiCard }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: S.defiLabel }, "D\xE9fi d'atelier"), /* @__PURE__ */ React.createElement("div", { style: S.defiTxt }, defi ? /* @__PURE__ */ React.createElement("span", { style: { color: defi.good ? "#6fe0cf" : "#e08a6f" } }, defi.txt, " \xB7 ", defi.lp > 0 ? "+" : "", defi.lp, " LP") : "Tire un \xE9v\xE9nement al\xE9atoire de ta session couture.")), /* @__PURE__ */ React.createElement("button", { style: S.rollBtn, onClick: rollDefi }, "Lancer")), /* @__PURE__ */ React.createElement("div", { style: S.toolbar }, /* @__PURE__ */ React.createElement("div", { style: S.tabs }, [["all", "Tout"], ["technique", "Techniques"], ["projet", "Projets"], ["dandy", "Dandy"]].map(([k, l]) => /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => setTab(k), style: { ...S.tab, ...tab === k ? S.tabActive : {} } }, l))), editMode && /* @__PURE__ */ React.createElement("button", { style: S.addBtn, onClick: openNew }, "+ Ajouter une qu\xEAte")), editMode && /* @__PURE__ */ React.createElement("div", { style: S.editHint }, "Mode \xE9dition : touche une carte pour la modifier, ou ajoute-en une nouvelle. Termine l'\xE9dition pour recommencer \xE0 cocher."), /* @__PURE__ */ React.createElement("section", { style: S.grid, className: "sr-grid" }, shown.map((q, idx) => {
     const on = !!done[q.id];
+    const cls = "quest quest-in" + (justId === q.id ? " quest-just" : "");
     return /* @__PURE__ */ React.createElement(
       "button",
       {
         key: q.id,
-        onClick: () => editMode ? openEdit(q) : toggle(q.id),
-        style: { ...S.quest, ...on && !editMode ? S.questDone : {}, ...editMode ? S.questEdit : {} },
-        className: "quest"
+        onClick: (e) => editMode ? openEdit(q) : toggle(q.id, e),
+        style: { ...S.quest, ...on && !editMode ? S.questDone : {}, ...editMode ? S.questEdit : {}, animationDelay: `${Math.min(idx * 30, 300)}ms` },
+        className: cls
       },
       /* @__PURE__ */ React.createElement("div", { style: S.qTop }, /* @__PURE__ */ React.createElement("span", { style: { ...S.qType, background: (QUEST_TYPES[q.type] || QUEST_TYPES.technique).bg } }, (QUEST_TYPES[q.type] || QUEST_TYPES.technique).label), /* @__PURE__ */ React.createElement("span", { style: S.qLp }, "+", q.lp, " LP")),
       /* @__PURE__ */ React.createElement("div", { style: S.qName }, q.nom),
       q.note ? /* @__PURE__ */ React.createElement("div", { style: S.qNote }, q.note) : null,
       /* @__PURE__ */ React.createElement("div", { style: { ...S.check, ...on && !editMode ? S.checkOn : {} } }, editMode ? "\u270E Modifier" : on ? "\u2713 Valid\xE9" : "Marquer comme fait")
     );
-  }), shown.length === 0 && /* @__PURE__ */ React.createElement("div", { style: S.empty }, "Aucune qu\xEAte ici. ", editMode ? "Ajoute-en une !" : "Passe en mode \xE9dition pour en cr\xE9er.")), /* @__PURE__ */ React.createElement("footer", { style: S.foot }, "Progression et qu\xEAtes sauvegard\xE9es sur cet appareil \xB7 ", doneCount, "/", quests.length, " qu\xEAtes valid\xE9es"));
+  }), shown.length === 0 && /* @__PURE__ */ React.createElement("div", { style: S.empty }, "Aucune qu\xEAte ici. ", editMode ? "Ajoute-en une !" : "Passe en mode \xE9dition pour en cr\xE9er.")), /* @__PURE__ */ React.createElement("footer", { style: S.foot }, "Progression et qu\xEAtes sauvegard\xE9es sur cet appareil \xB7 ", doneCount, "/", quests.length, " qu\xEAtes valid\xE9es"), flyers.map((f) => /* @__PURE__ */ React.createElement("span", { key: f.id, className: "lp-fly", style: { left: f.x - 20, top: f.y - 20 } }, "+", f.lp)));
 }
 const CSS = `
 @keyframes fall { to { transform: translateY(110vh) rotate(540deg); opacity: 0; } }
 @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 .floaty { animation: float 4s ease-in-out infinite; }
-.quest { transition: transform .12s ease, border-color .2s ease, background .2s ease; }
-.quest:hover { transform: translateY(-3px); border-color: #6a5a4a !important; }
+.quest { transition: transform .14s cubic-bezier(.2,.8,.2,1), border-color .2s ease, background .2s ease, box-shadow .2s ease; }
+.quest:hover { transform: translateY(-3px); border-color: #6a5a4a !important; box-shadow: 0 8px 24px -12px rgba(0,0,0,.6); }
 .quest:focus-visible { outline: 2px solid #f2cf5b; outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { .floaty, .quest { animation: none !important; transition: none !important; } }
+/* apparition en cascade des cartes */
+@keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.quest-in { animation: cardIn .4s cubic-bezier(.2,.8,.2,1) both; }
+/* pulse quand une qu\xEAte vient d'\xEAtre valid\xE9e */
+@keyframes validPulse { 0% { transform: scale(1); } 40% { transform: scale(1.04); } 100% { transform: scale(1); } }
+.quest-just { animation: validPulse .45s ease; }
+/* LP qui volent vers la barre */
+@keyframes lpFly { 0% { opacity: 0; transform: translateY(0) scale(.8); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(-60px) scale(1.1); } }
+.lp-fly { position: fixed; z-index: 95; pointer-events: none; font-family: system-ui, sans-serif; font-weight: 700; font-size: 20px; color: #f2cf5b; text-shadow: 0 2px 8px rgba(0,0,0,.6); animation: lpFly 1s ease-out forwards; }
+/* barre de LP : surpiq\xFBre qui brille au remplissage */
+.lp-fill { position: relative; overflow: hidden; }
+.lp-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent); transform: translateX(-100%); animation: shimmer 2.4s ease-in-out infinite; }
+@keyframes shimmer { 0% { transform: translateX(-100%); } 60%,100% { transform: translateX(200%); } }
+/* \xE9cran de promotion */
+@keyframes promoBgIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes promoPop { 0% { opacity: 0; transform: scale(.6) translateY(20px); } 55% { opacity: 1; transform: scale(1.08); } 100% { transform: scale(1); } }
+@keyframes badgeSpin { 0% { transform: rotateY(0) scale(.8); opacity: 0; } 60% { opacity: 1; } 100% { transform: rotateY(360deg) scale(1); opacity: 1; } }
+.promo-badge-anim { animation: badgeSpin 1s cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .floaty, .quest, .quest-in, .quest-just, .lp-fill::after, .promo-badge-anim { animation: none !important; transition: none !important; }
+  .lp-fill::after { display: none; }
+}
+/* mobile : la carte de rang reste le h\xE9ros, tout respire */
+@media (max-width: 600px) {
+  .sr-root { padding: 18px 14px 48px !important; }
+  .sr-h1 { font-size: 30px !important; }
+  .sr-rankcard { flex-direction: column !important; text-align: center; padding: 20px !important; }
+  .sr-rankcard .sr-rankinfo { width: 100%; }
+  .sr-badge { margin: 0 auto; }
+  .sr-tier { font-size: 28px !important; }
+  .sr-grid { grid-template-columns: 1fr !important; }
+  .sr-ladder { justify-content: center; }
+  .sr-lprow { justify-content: center; }
+}
 `;
 const S = {
   root: { minHeight: "100vh", background: "radial-gradient(1200px 600px at 50% -10%, #241d19, #14100e 60%)", color: "#ece3d8", fontFamily: "'Georgia', serif", padding: "28px 20px 60px", maxWidth: 900, margin: "0 auto" },
@@ -759,14 +823,14 @@ const S = {
   logoBox: { flex: "0 0 auto", width: 56, height: 56, borderRadius: 14, background: "radial-gradient(circle at 50% 38%, #1c2436, #0b0d12 75%)", border: "1px solid #2a3346", display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 },
   headBtns: { display: "flex", gap: 8, flexWrap: "wrap" },
   eyebrow: { fontFamily: "system-ui, sans-serif", fontSize: 11, letterSpacing: "0.28em", color: "#9c8a76" },
-  h1: { fontSize: 40, margin: "6px 0 2px", letterSpacing: "-0.02em" },
+  h1: { fontSize: 40, margin: "6px 0 2px", letterSpacing: "0.01em", fontWeight: 700 },
   sub: { fontFamily: "system-ui, sans-serif", fontSize: 14, color: "#a89985", margin: 0 },
-  reset: { fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#a89985", background: "transparent", border: "1px solid #3a322c", borderRadius: 8, padding: "8px 12px", cursor: "pointer" },
+  reset: { fontFamily: "system-ui, sans-serif", fontSize: 12, color: "#a89985", background: "transparent", border: "1px solid #3a322c", borderRadius: 8, padding: "8px 12px", cursor: "pointer", transition: "border-color .2s, color .2s" },
   editOn: { color: "#14100e", background: "#f2cf5b", borderColor: "#f2cf5b", fontWeight: 600 },
-  rankCard: { display: "flex", gap: 24, alignItems: "center", background: "linear-gradient(160deg, #201a16, #17120f)", border: "1px solid #33291f", borderRadius: 20, padding: 24, marginBottom: 18, flexWrap: "wrap" },
+  rankCard: { display: "flex", gap: 28, alignItems: "center", background: "linear-gradient(160deg, #241d18, #17120f)", border: "1px solid #3a2f24", borderRadius: 22, padding: 30, marginBottom: 18, flexWrap: "wrap", position: "relative", overflow: "hidden" },
   badgeWrap: { flex: "0 0 auto" },
   rankInfo: { flex: 1, minWidth: 240 },
-  tierName: { fontSize: 34, fontWeight: 700, letterSpacing: "-0.01em" },
+  tierName: { fontSize: 40, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1 },
   div: { fontSize: 26, opacity: 0.85 },
   lpRow: { display: "flex", alignItems: "center", gap: 12, margin: "14px 0 6px" },
   lpBarBg: { flex: 1, height: 12, background: "#0f0c0a", borderRadius: 20, overflow: "hidden", border: "1px solid #2a221c" },
@@ -812,7 +876,14 @@ const S = {
   modalActions: { display: "flex", alignItems: "center", gap: 8, marginTop: 20 },
   deleteBtn: { fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#e08a6f", background: "transparent", border: "1px solid #5a3128", borderRadius: 9, padding: "9px 14px", cursor: "pointer" },
   ghostBtn: { fontFamily: "system-ui, sans-serif", fontSize: 13, color: "#a89985", background: "transparent", border: "1px solid #3a322c", borderRadius: 9, padding: "9px 14px", cursor: "pointer" },
-  primaryBtn: { fontFamily: "system-ui, sans-serif", fontSize: 13, fontWeight: 600, color: "#14100e", background: "linear-gradient(90deg, #f2cf5b, #c99a2e)", border: "none", borderRadius: 9, padding: "9px 18px", cursor: "pointer" }
+  primaryBtn: { fontFamily: "system-ui, sans-serif", fontSize: 13, fontWeight: 600, color: "#14100e", background: "linear-gradient(90deg, #f2cf5b, #c99a2e)", border: "none", borderRadius: 9, padding: "9px 18px", cursor: "pointer" },
+  // écran de promotion
+  promoBg: { position: "fixed", inset: 0, background: "radial-gradient(circle at 50% 42%, rgba(30,24,20,0.92), rgba(8,6,5,0.97))", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 92, padding: 20, animation: "promoBgIn .4s ease" },
+  promoInner: { textAlign: "center", maxWidth: 420, animation: "promoPop .7s cubic-bezier(.2,.8,.2,1) both" },
+  promoLabel: { fontFamily: "system-ui, sans-serif", fontSize: 13, letterSpacing: "0.34em", marginBottom: 18, fontWeight: 600 },
+  promoTier: { fontFamily: "'Georgia', serif", fontSize: 44, fontWeight: 700, letterSpacing: "-0.01em", marginTop: 14 },
+  promoSub: { fontFamily: "system-ui, sans-serif", fontSize: 15, color: "#b3a493", marginTop: 8, lineHeight: 1.5 },
+  promoBtn: { marginTop: 26, fontFamily: "system-ui, sans-serif", fontSize: 14, fontWeight: 600, background: "transparent", border: "1.5px solid", borderRadius: 12, padding: "12px 32px", cursor: "pointer" }
 };
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(AtelierRank));
 </script>
