@@ -437,7 +437,28 @@ const DEFAULT_QUESTS = [
   { id: "q35", type: "projet", nom: "Ensemble 2 pi\xE8ces coh\xE9rent, enti\xE8rement patronn\xE9", lp: 400, note: "Veste + pantalon OU robe structur\xE9e" },
   { id: "q36", type: "projet", nom: "Mini-collection capsule (3 \xE0 5 pi\xE8ces li\xE9es)", lp: 450, note: "Le climb de fin de saison" },
   { id: "q37", type: "dandy", nom: "Lookbook pro + pr\xE9sentation collection", lp: 250, note: "Direction artistique aboutie" },
-  { id: "q38", type: "dandy", nom: "Ann\xE9e rentable OU objectif CA atteint", lp: 300, note: "DandyMTP vit vraiment" }
+  { id: "q38", type: "dandy", nom: "Ann\xE9e rentable OU objectif CA atteint", lp: 300, note: "DandyMTP vit vraiment" },
+  // ═══ EXTENSION · techniques pointues ═══
+  { id: "q39", type: "technique", nom: "Point sellier main sur cuir / simili", lp: 65, note: "Finition maroquinerie" },
+  { id: "q40", type: "technique", nom: "Passepoil cord\xE9 sur couture", lp: 55, note: "" },
+  { id: "q41", type: "technique", nom: "Plis creux ou religieuse ma\xEEtris\xE9s", lp: 50, note: "R\xE9gularit\xE9 au mm" },
+  { id: "q42", type: "technique", nom: "Surpiq\xFBre aiguille double r\xE9guli\xE8re", lp: 45, note: "" },
+  // ═══ EXTENSION · matières à dompter ═══
+  { id: "q43", type: "technique", nom: "1re pi\xE8ce en soie / mousseline", lp: 70, note: "Mati\xE8re glissante" },
+  { id: "q44", type: "technique", nom: "1re pi\xE8ce en cuir ou simili", lp: 75, note: "" },
+  { id: "q45", type: "technique", nom: "1re pi\xE8ce en maille / jersey (bord-c\xF4te)", lp: 65, note: "Machine surjeteuse id\xE9ale" },
+  // ═══ EXTENSION · patronnage & autonomie ═══
+  { id: "q46", type: "technique", nom: "Cr\xE9er ta base (block) personnelle r\xE9utilisable", lp: 120, note: "Autonomie cr\xE9ative totale" },
+  { id: "q47", type: "technique", nom: "Moulage / drap\xE9 sur mannequin", lp: 100, note: "Concevoir en volume" },
+  // ═══ EXTENSION · signature DandyMTP ═══
+  { id: "q48", type: "dandy", nom: "Finition int\xE9rieure signature (doublure/surpiq\xFBre)", lp: 90, note: "Ta patte reconnaissable" },
+  { id: "q49", type: "dandy", nom: "Pi\xE8ce en s\xE9rie limit\xE9e num\xE9rot\xE9e", lp: 200, note: "Raret\xE9 = d\xE9sir" },
+  // ═══ EXTENSION · vie de la marque ═══
+  { id: "q50", type: "dandy", nom: "Donner un atelier / cours de couture", lp: 180, note: "Transmettre = asseoir l'expertise" },
+  { id: "q51", type: "dandy", nom: "Premi\xE8re collab / partenariat", lp: 220, note: "" },
+  // ═══ EXTENSION · méta-défis (régularité) ═══
+  { id: "q52", type: "projet", nom: "Coudre 7 jours d'affil\xE9e", lp: 80, note: "Discipline d'atelier" },
+  { id: "q53", type: "projet", nom: "Projet z\xE9ro chute jet\xE9e (tout r\xE9utilis\xE9)", lp: 110, note: "Upcycling int\xE9gral" }
 ];
 const DEFIS = [
   { txt: "Ta couture est nickel du premier coup", lp: 15, good: true },
@@ -451,7 +472,7 @@ const DEFIS = [
 const KEY_PROGRESS = "dandy_atelier_rank";
 const KEY_QUESTS = "dandy_atelier_quests";
 const KEY_QVERSION = "dandy_atelier_quests_version";
-const QUESTS_VERSION = 2;
+const QUESTS_VERSION = 3;
 function rankFromLp(lp) {
   const perTier = DIVISIONS.length * LP_PER_DIVISION;
   let tierIndex = Math.floor(lp / perTier);
@@ -622,6 +643,17 @@ function AtelierRank() {
       if (rawQ && storedVer >= QUESTS_VERSION) {
         const parsed = JSON.parse(rawQ);
         if (Array.isArray(parsed) && parsed.length) setQuests(parsed);
+      } else if (rawQ) {
+        const parsed = JSON.parse(rawQ);
+        const existingIds = new Set(Array.isArray(parsed) ? parsed.map((q) => q.id) : []);
+        const additions = DEFAULT_QUESTS.filter((q) => !existingIds.has(q.id));
+        const merged = [...Array.isArray(parsed) ? parsed : [], ...additions];
+        setQuests(merged);
+        try {
+          localStorage.setItem(KEY_QUESTS, JSON.stringify(merged));
+          localStorage.setItem(KEY_QVERSION, String(QUESTS_VERSION));
+        } catch (e) {
+        }
       } else {
         setQuests(DEFAULT_QUESTS);
         try {
