@@ -405,17 +405,17 @@ const DEFAULT_QUESTS = [
   { id: "q07", type: "technique", nom: "Poche passepoil\xE9e double bord net", lp: 55, note: "", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=p6Pn12JeSzw" }] },
   { id: "q08", type: "technique", nom: "Boutonni\xE8re passepoil\xE9e (\xE0 la main)", lp: 65, note: "Pas machine", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=AbFZUep2hV8" }] },
   { id: "q09", type: "technique", nom: "Col chemise + pied de col mont\xE9 impeccable", lp: 55, note: "", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=i4srYW30Jms" }] },
-  { id: "q10", type: "technique", nom: "Fermeture invisible sur mati\xE8re fluide", lp: 50, note: "Viscose / soie" },
+  { id: "q10", type: "technique", nom: "Fermeture invisible sur mati\xE8re fluide", lp: 50, note: "Viscose / soie", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=BAXM4ZeEO0E" }] },
   { id: "q11", type: "technique", nom: "Coutures anglaises sur tout un v\xEAtement", lp: 45, note: "Finition int\xE9rieure couture", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=0Of1z_1bseE" }] },
   { id: "q12", type: "projet", nom: "3\u1D49 type de pantalon (nouveau patron)", lp: 130, note: "\xC9largir ton r\xE9pertoire" },
   { id: "q13", type: "dandy", nom: "1er live Twitch couture (m\xEAme court)", lp: 60, note: "Briser la glace cam\xE9ra" },
   { id: "q14", type: "dandy", nom: "Shooting produit propre (10 pi\xE8ces)", lp: 55, note: "Lumi\xE8re + fond ma\xEEtris\xE9s" },
   // ═══ ARGENT → OR · tailoring & structure (mois 4-6) ═══
   { id: "q15", type: "technique", nom: "Manche tailleur avec t\xEAte d'aisance", lp: 90, note: "Le vrai saut tailoring", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=dVdPTQdsv0I" }] },
-  { id: "q16", type: "technique", nom: "Doublure compl\xE8te bien tombante", lp: 85, note: "" },
+  { id: "q16", type: "technique", nom: "Doublure compl\xE8te bien tombante", lp: 85, note: "", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=P1TQspNX4K0" }] },
   { id: "q17", type: "technique", nom: "Entoilage thermocollant ma\xEEtris\xE9", lp: 70, note: "Cols, poignets, revers", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=luKi2Cc8IxQ" }] },
-  { id: "q18", type: "technique", nom: "Revers crant\xE9 net (veste)", lp: 80, note: "" },
-  { id: "q19", type: "technique", nom: "Braguette denim parfaite reproductible", lp: 60, note: "Niveau industriel" },
+  { id: "q18", type: "technique", nom: "Revers crant\xE9 net (veste)", lp: 80, note: "", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=d6HPvdSkLm4" }] },
+  { id: "q19", type: "technique", nom: "Braguette denim parfaite reproductible", lp: 60, note: "Niveau industriel", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=JsvKpbSzFhs" }] },
   { id: "q20", type: "projet", nom: "2\u1D49 type de veste (structure diff\xE9rente)", lp: 200, note: "Au-del\xE0 de ta veste actuelle" },
   { id: "q21", type: "dandy", nom: "Campagne pub tourn\xE9e (Op\xE9ra Com\xE9die)", lp: 120, note: "Ton 1er film de marque" },
   { id: "q22", type: "dandy", nom: "10 lives Twitch cumul\xE9s", lp: 90, note: "R\xE9gularit\xE9 de streaming" },
@@ -424,7 +424,7 @@ const DEFAULT_QUESTS = [
   { id: "q24", type: "projet", nom: "Veste d\xE9structur\xE9e doubl\xE9e deadstock", lp: 250, note: "Pi\xE8ce signature" },
   { id: "q25", type: "projet", nom: "Pantalon \xE0 pinces braguette + ceinture nickel", lp: 200, note: "" },
   { id: "q26", type: "projet", nom: "Chemise couture haute (placket cach\xE9 + col net)", lp: 180, note: "" },
-  { id: "q27", type: "technique", nom: "Patronnage complet d'un mod\xE8le from scratch", lp: 120, note: "Autonomie totale" },
+  { id: "q27", type: "technique", nom: "Patronnage complet d'un mod\xE8le from scratch", lp: 120, note: "Autonomie totale", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=SMkys3iU4hY" }] },
   { id: "q28", type: "dandy", nom: "Placement en boutique (d\xE9p\xF4t-vente / wholesale)", lp: 160, note: "Pr\xE9sence physique" },
   { id: "q29", type: "dandy", nom: "100 abonn\xE9s Twitch OU communaut\xE9 engag\xE9e", lp: 130, note: "Traction r\xE9elle" },
   // ═══ PLATINE → DIAMANT · contraintes créatives (mois 8-10) ═══
@@ -442,14 +442,14 @@ const DEFAULT_QUESTS = [
   { id: "q39", type: "technique", nom: "Point sellier main sur cuir / simili", lp: 65, note: "Finition maroquinerie", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=fbbmT36hjfo" }] },
   { id: "q40", type: "technique", nom: "Passepoil cord\xE9 sur couture", lp: 55, note: "" },
   { id: "q41", type: "technique", nom: "Plis creux ou religieuse ma\xEEtris\xE9s", lp: 50, note: "R\xE9gularit\xE9 au mm" },
-  { id: "q42", type: "technique", nom: "Surpiq\xFBre aiguille double r\xE9guli\xE8re", lp: 45, note: "" },
+  { id: "q42", type: "technique", nom: "Surpiq\xFBre aiguille double r\xE9guli\xE8re", lp: 45, note: "", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=SVrIKvRWA-0" }] },
   // ═══ EXTENSION · matières à dompter ═══
-  { id: "q43", type: "technique", nom: "1re pi\xE8ce en soie / mousseline", lp: 70, note: "Mati\xE8re glissante" },
+  { id: "q43", type: "technique", nom: "1re pi\xE8ce en soie / mousseline", lp: 70, note: "Mati\xE8re glissante", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=wjSWguw9fps" }] },
   { id: "q44", type: "technique", nom: "1re pi\xE8ce en cuir ou simili", lp: 75, note: "" },
   { id: "q45", type: "technique", nom: "1re pi\xE8ce en maille / jersey (bord-c\xF4te)", lp: 65, note: "Machine surjeteuse id\xE9ale", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=_2NPQHVD8XU" }] },
   // ═══ EXTENSION · patronnage & autonomie ═══
   { id: "q46", type: "technique", nom: "Cr\xE9er ta base (block) personnelle r\xE9utilisable", lp: 120, note: "Autonomie cr\xE9ative totale" },
-  { id: "q47", type: "technique", nom: "Moulage / drap\xE9 sur mannequin", lp: 100, note: "Concevoir en volume" },
+  { id: "q47", type: "technique", nom: "Moulage / drap\xE9 sur mannequin", lp: 100, note: "Concevoir en volume", tutos: [{ label: "Tuto YouTube", url: "https://www.youtube.com/watch?v=bLYeeYpA794" }] },
   // ═══ EXTENSION · signature DandyMTP ═══
   { id: "q48", type: "dandy", nom: "Finition int\xE9rieure signature (doublure/surpiq\xFBre)", lp: 90, note: "Ta patte reconnaissable" },
   { id: "q49", type: "dandy", nom: "Pi\xE8ce en s\xE9rie limit\xE9e num\xE9rot\xE9e", lp: 200, note: "Raret\xE9 = d\xE9sir" },
@@ -475,7 +475,7 @@ const KEY_QUESTS = "dandy_atelier_quests";
 const KEY_QVERSION = "dandy_atelier_quests_version";
 const KEY_JOURNAL = "dandy_atelier_journal";
 const KEY_SPAWN = "dandy_atelier_spawn";
-const QUESTS_VERSION = 4;
+const QUESTS_VERSION = 5;
 // ═══ Génération auto de quêtes similaires ═══
 // Quand on valide SPAWN_THRESHOLD quêtes du même type ET du même palier de LP,
 // une nouvelle quête similaire (même type, même palier) apparaît automatiquement.
