@@ -567,6 +567,7 @@ const KEY_JOURNAL = "dandy_atelier_journal";
 const KEY_SPAWN = "dandy_atelier_spawn";
 const KEY_DEFIS = "dandy_atelier_defis_hebdo";
 const KEY_DEFIS_ARCHIVE = "dandy_atelier_defis_archive";
+const KEY_CLASSEMENT = "dandy_atelier_classement";
 // ═══ Photos des défis (IndexedDB) ═══
 // Les photos sont trop lourdes pour localStorage : on les range dans IndexedDB,
 // après compression. Si IndexedDB est indisponible, l'appli continue sans photos.
@@ -729,6 +730,41 @@ function rankFromLp(lp) {
 }
 function newId() {
   return "q" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+}
+// ═══ Codes de partage du classement ═══
+// Un joueur génère un code contenant son pseudo et son score ; les autres le
+// collent dans leur appli pour l'ajouter à leur classement. Aucun serveur requis.
+const CODE_PREFIX = "NUNU1-";
+function b64urlEncode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlDecode(s) {
+  let t = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (t.length % 4) t += "=";
+  const bin = atob(t);
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+function makeShareCode(pseudo, lp, nbQuetes, nbDefis) {
+  const payload = { p: String(pseudo || "").slice(0, 24), l: Math.max(0, Math.round(lp) || 0), q: nbQuetes || 0, d: nbDefis || 0, t: Date.now() };
+  return CODE_PREFIX + b64urlEncode(JSON.stringify(payload));
+}
+function parseShareCode(code) {
+  try {
+    let c = String(code || "").trim();
+    const i = c.indexOf(CODE_PREFIX);
+    if (i === -1) return null;
+    c = c.slice(i + CODE_PREFIX.length).split(/\s/)[0];
+    const obj = JSON.parse(b64urlDecode(c));
+    if (!obj || typeof obj.p !== "string" || typeof obj.l !== "number") return null;
+    if (!obj.p.trim()) return null;
+    return { pseudo: obj.p.slice(0, 24), lp: Math.max(0, Math.round(obj.l)), quetes: obj.q || 0, defis: obj.d || 0, ts: obj.t || Date.now() };
+  } catch (e) {
+    return null;
+  }
 }
 function DandyLogo({ size = 46, sw = 24 }) {
   const gid = "dandyDiamond";
@@ -990,6 +1026,58 @@ function QuetesPanel({ quests, done, photos, journal, onPhoto, onAddPhoto, onClo
           }))
   ));
 }
+function ClassementPanel({ pseudo, onPseudo, moiLp, moiQuetes, moiDefis, joueurs, onAdd, onRemove, onClose }) {
+  const [code, setCode] = React.useState("");
+  const [msg, setMsg] = React.useState("");
+  const [copie, setCopie] = React.useState(false);
+  const monCode = makeShareCode(pseudo || "Moi", moiLp, moiQuetes, moiDefis);
+  const liste = [{ pseudo: pseudo || "Moi", lp: moiLp, quetes: moiQuetes, defis: moiDefis, moi: true }]
+    .concat(joueurs.map((j) => ({ ...j, moi: false })))
+    .sort((a, b) => b.lp - a.lp);
+  const copier = () => {
+    const done = () => { setCopie(true); setTimeout(() => setCopie(false), 1800); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(monCode).then(done, () => window.prompt("Copie ton code :", monCode));
+    } else window.prompt("Copie ton code :", monCode);
+  };
+  const ajouter = () => {
+    const p = parseShareCode(code);
+    if (!p) { setMsg("Code invalide. V\xE9rifie que tu as bien coll\xE9 le code entier."); return; }
+    if (pseudo && p.pseudo.toLowerCase() === pseudo.toLowerCase()) { setMsg("C'est ton propre pseudo \u2014 change le tien ou celui du code."); return; }
+    onAdd(p);
+    setCode(""); setMsg("\u2713 " + p.pseudo + " ajout\xE9 au classement.");
+    setTimeout(() => setMsg(""), 2500);
+  };
+  return React.createElement("div", { style: S.modalBg, onClick: onClose }, React.createElement("div", { style: { ...S.modal, maxWidth: 560, maxHeight: "86vh", display: "flex", flexDirection: "column" }, onClick: (e) => e.stopPropagation() },
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 } },
+      React.createElement("div", { style: S.modalTitle }, "Classement"),
+      React.createElement("button", { style: S.ghostBtn, onClick: onClose }, "Fermer")),
+    React.createElement("div", { style: { overflowY: "auto", paddingRight: 4 } },
+      React.createElement("div", { style: S.clsBloc },
+        React.createElement("div", { style: S.clsLabel }, "Ton pseudo"),
+        React.createElement("input", { style: S.input, value: pseudo, maxLength: 24, placeholder: "Ton nom de couturier", onChange: (e) => onPseudo(e.target.value) }),
+        React.createElement("div", { style: S.clsHint }, "Partage ce code dans ton chat Twitch ou Discord : les autres le collent chez eux pour te voir dans leur classement."),
+        React.createElement("div", { style: S.codeBox }, monCode),
+        React.createElement("button", { style: { ...S.rollBtn, width: "100%" }, onClick: copier }, copie ? "\u2713 Code copi\xE9" : "Copier mon code")),
+      React.createElement("div", { style: S.clsBloc },
+        React.createElement("div", { style: S.clsLabel }, "Ajouter un joueur"),
+        React.createElement("textarea", { style: { ...S.input, minHeight: 62, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 11 }, value: code, placeholder: "Colle ici le code d'un autre joueur\u2026", onChange: (e) => { setCode(e.target.value); setMsg(""); } }),
+        React.createElement("button", { style: { ...S.rollBtn, width: "100%" }, onClick: ajouter }, "Ajouter au classement"),
+        msg ? React.createElement("div", { style: { ...S.clsHint, color: msg[0] === "\u2713" ? "#6fe0cf" : "#e08a6f", marginTop: 8 } }, msg) : null),
+      React.createElement("div", { style: { ...S.clsLabel, marginTop: 4, marginBottom: 8 } }, "Classement \xB7 ", liste.length, " joueur", liste.length > 1 ? "s" : ""),
+      liste.map((j, i) => {
+        const r = rankFromLp(j.lp);
+        const t = TIERS[r.tierIndex];
+        return React.createElement("div", { key: i, style: { ...S.clsRow, ...j.moi ? S.clsRowMoi : {} } },
+          React.createElement("span", { style: { ...S.clsPos, color: i === 0 ? "#f2cf5b" : "#7a6d5e" } }, i + 1),
+          React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+            React.createElement("div", { style: { fontFamily: "var(--font-display)", fontSize: 16, color: j.moi ? "#f2cf5b" : "#ece3d8" } }, j.pseudo, j.moi ? " \xB7 toi" : ""),
+            React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, color: t.glow, marginTop: 2 } }, t.name, r.division ? " " + r.division : "", " \xB7 ", j.lp, " LP")),
+          j.moi ? null : React.createElement("button", { style: S.clsDel, onClick: () => onRemove(j.pseudo), title: "Retirer" }, "\xD7"));
+      }),
+      React.createElement("div", { style: { ...S.clsHint, marginTop: 14 } }, "Les scores ne se mettent pas \xE0 jour tout seuls : demande un nouveau code \xE0 tes joueurs quand ils progressent."))
+  ));
+}
 function AtelierRank() {
   const [quests, setQuests] = useState(DEFAULT_QUESTS);
   const [done, setDone] = useState({});
@@ -1015,6 +1103,9 @@ function AtelierRank() {
   const [defisArchive, setDefisArchive] = useState([]);
   const [showArchive, setShowArchive] = useState(false);
   const [showQuetes, setShowQuetes] = useState(false);
+  const [pseudo, setPseudo] = useState("");
+  const [joueurs, setJoueurs] = useState([]);
+  const [showClassement, setShowClassement] = useState(false);
   const [photoView, setPhotoView] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const fileInputRef = useRef(null);
@@ -1090,6 +1181,17 @@ function AtelierRank() {
       if (rawA) { const a = JSON.parse(rawA); if (Array.isArray(a)) setDefisArchive(a); }
     } catch (e) {
     }
+    try {
+      const rawC = localStorage.getItem(KEY_CLASSEMENT);
+      if (rawC) {
+        const c = JSON.parse(rawC);
+        if (c && typeof c === "object") {
+          if (typeof c.pseudo === "string") setPseudo(c.pseudo);
+          if (Array.isArray(c.joueurs)) setJoueurs(c.joueurs);
+        }
+      }
+    } catch (e) {
+    }
     setLoaded(true);
   }, []);
   useEffect(() => {
@@ -1152,6 +1254,22 @@ function AtelierRank() {
     if (!loaded) return;
     try { localStorage.setItem(KEY_DEFIS_ARCHIVE, JSON.stringify(defisArchive)); } catch (e) {}
   }, [defisArchive, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem(KEY_CLASSEMENT, JSON.stringify({ pseudo, joueurs })); } catch (e) {}
+  }, [pseudo, joueurs, loaded]);
+  const ajouterJoueur = useCallback((p) => {
+    setJoueurs((list) => {
+      const i = list.findIndex((x) => x.pseudo.toLowerCase() === p.pseudo.toLowerCase());
+      if (i === -1) return [...list, p];
+      // Même joueur : on ne garde que le code le plus récent.
+      if ((list[i].ts || 0) > (p.ts || 0)) return list;
+      const c = list.slice(); c[i] = p; return c;
+    });
+  }, []);
+  const retirerJoueur = useCallback((nom) => {
+    setJoueurs((list) => list.filter((x) => x.pseudo !== nom));
+  }, []);
   const askPhoto = useCallback((key) => {
     pendingPhotoKey.current = key;
     if (fileInputRef.current) { fileInputRef.current.value = ""; fileInputRef.current.click(); }
@@ -1299,7 +1417,7 @@ function AtelierRank() {
   /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, justifyContent: "flex-end" } },
     /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => removePhoto(photoView.key) }, "Supprimer"),
     /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => { setPhotoView(null); askPhoto(photoView.key); } }, "Remplacer"),
-    /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => setPhotoView(null) }, "Fermer")))), showJournal && /* @__PURE__ */ React.createElement(JournalPanel, { journal, photos, onPhoto: setPhotoView, onClose: () => setShowJournal(false) }), showArchive && /* @__PURE__ */ React.createElement(ArchivePanel, { archive: defisArchive, photos, onPhoto: setPhotoView, onAddPhoto: askPhoto, onClose: () => setShowArchive(false) }), showQuetes && /* @__PURE__ */ React.createElement(QuetesPanel, { quests, done, photos, journal, onPhoto: setPhotoView, onAddPhoto: askPhoto, onClose: () => setShowQuetes(false) }), spawnToast && /* @__PURE__ */ React.createElement("div", { style: S.spawnToast, className: "spawn-toast", onClick: () => setSpawnToast(null) }, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: "0.16em", color: "#6fe0cf", marginBottom: 4 } }, "\u2728 NOUVELLE QU\xCATE D\xC9BLOQU\xC9E"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 14, color: "#ece3d8" } }, spawnToast.nom)), tutoModal && /* @__PURE__ */ React.createElement("div", { style: S.modalBg, onClick: () => setTutoModal(null) }, /* @__PURE__ */ React.createElement("div", { style: S.modal, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { style: S.modalTitle }, "Tutoriels"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 13, color: "#a89985", marginBottom: 14, lineHeight: 1.35 } }, tutoModal.nom), (tutoModal.tutos || []).map((t, i) => /* @__PURE__ */ React.createElement("a", { key: i, href: t.url, target: "_blank", rel: "noopener noreferrer", style: S.tutoLink }, /* @__PURE__ */ React.createElement("span", null, "\u25b8 ", t.label || t.url), /* @__PURE__ */ React.createElement("span", { style: { color: "#7a6d5e", fontSize: 12 } }, "\u2197"))), /* @__PURE__ */ React.createElement("div", { style: S.modalActions }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => setTutoModal(null) }, "Fermer")))), editing && /* @__PURE__ */ React.createElement(
+    /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => setPhotoView(null) }, "Fermer")))), showJournal && /* @__PURE__ */ React.createElement(JournalPanel, { journal, photos, onPhoto: setPhotoView, onClose: () => setShowJournal(false) }), showArchive && /* @__PURE__ */ React.createElement(ArchivePanel, { archive: defisArchive, photos, onPhoto: setPhotoView, onAddPhoto: askPhoto, onClose: () => setShowArchive(false) }), showQuetes && /* @__PURE__ */ React.createElement(QuetesPanel, { quests, done, photos, journal, onPhoto: setPhotoView, onAddPhoto: askPhoto, onClose: () => setShowQuetes(false) }), showClassement && /* @__PURE__ */ React.createElement(ClassementPanel, { pseudo, onPseudo: setPseudo, moiLp: totalLp, moiQuetes: doneCount, moiDefis: defisArchive.length, joueurs, onAdd: ajouterJoueur, onRemove: retirerJoueur, onClose: () => setShowClassement(false) }), spawnToast && /* @__PURE__ */ React.createElement("div", { style: S.spawnToast, className: "spawn-toast", onClick: () => setSpawnToast(null) }, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: "0.16em", color: "#6fe0cf", marginBottom: 4 } }, "\u2728 NOUVELLE QU\xCATE D\xC9BLOQU\xC9E"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 14, color: "#ece3d8" } }, spawnToast.nom)), tutoModal && /* @__PURE__ */ React.createElement("div", { style: S.modalBg, onClick: () => setTutoModal(null) }, /* @__PURE__ */ React.createElement("div", { style: S.modal, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { style: S.modalTitle }, "Tutoriels"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 13, color: "#a89985", marginBottom: 14, lineHeight: 1.35 } }, tutoModal.nom), (tutoModal.tutos || []).map((t, i) => /* @__PURE__ */ React.createElement("a", { key: i, href: t.url, target: "_blank", rel: "noopener noreferrer", style: S.tutoLink }, /* @__PURE__ */ React.createElement("span", null, "\u25b8 ", t.label || t.url), /* @__PURE__ */ React.createElement("span", { style: { color: "#7a6d5e", fontSize: 12 } }, "\u2197"))), /* @__PURE__ */ React.createElement("div", { style: S.modalActions }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => setTutoModal(null) }, "Fermer")))), editing && /* @__PURE__ */ React.createElement(
     QuestEditor,
     {
       quest: editing,
@@ -1314,7 +1432,7 @@ function AtelierRank() {
       onClick: () => setEditMode((v) => !v)
     },
     editMode ? "\u2713 Terminer l'\xE9dition" : "\u270E \xC9diter"
-  ), /* @__PURE__ */ React.createElement("button", { style: S.reset, onClick: () => setShowJournal(true) }, "\uD83D\uDCD5 Journal", journal.length ? /* @__PURE__ */ React.createElement("span", { style: S.journalCount }, journal.length) : null), /* @__PURE__ */ React.createElement("button", { style: S.reset, onClick: reset }, "R\xE9initialiser"))), /* @__PURE__ */ React.createElement("section", { style: { ...S.rankCard, boxShadow: `0 0 60px -20px ${t.glow}` }, className: "sr-rankcard" }, /* @__PURE__ */ React.createElement("div", { style: S.badgeWrap, className: "floaty sr-badge" }, /* @__PURE__ */ React.createElement(RankBadge, { tierIndex: rank.tierIndex })), /* @__PURE__ */ React.createElement("div", { style: S.rankInfo, className: "sr-rankinfo" }, /* @__PURE__ */ React.createElement("div", { style: { ...S.tierName, color: t.glow }, className: "sr-tier" }, t.name, !isTop && /* @__PURE__ */ React.createElement("span", { style: S.div }, " ", rank.division)), /* @__PURE__ */ React.createElement("div", { style: S.lpRow, className: "sr-lprow" }, /* @__PURE__ */ React.createElement("div", { style: S.lpBarBg }, /* @__PURE__ */ React.createElement("div", { className: "lp-fill", style: { ...S.lpBarFill, width: `${pct}%`, background: `linear-gradient(90deg, ${t.metal}, ${t.glow})` } })), /* @__PURE__ */ React.createElement("div", { style: S.lpText }, isTop ? `${rank.topLp} LP` : `${rank.lpInDivision} / ${LP_PER_DIVISION} LP`)), /* @__PURE__ */ React.createElement("div", { style: S.totalLine }, totalLp, " LP au total \xB7 ma\xEEtrise globale ", globalPct, "%"), /* @__PURE__ */ React.createElement("div", { style: S.ladder, className: "sr-ladder" }, TIERS.map((ti, i) => /* @__PURE__ */ React.createElement("div", { key: ti.key, title: ti.name, style: {
+  ), /* @__PURE__ */ React.createElement("button", { style: S.reset, onClick: () => setShowJournal(true) }, "\uD83D\uDCD5 Journal", journal.length ? /* @__PURE__ */ React.createElement("span", { style: S.journalCount }, journal.length) : null), /* @__PURE__ */ React.createElement("button", { style: S.reset, onClick: () => setShowClassement(true) }, "\uD83C\uDFC6 Classement", joueurs.length ? /* @__PURE__ */ React.createElement("span", { style: S.journalCount }, joueurs.length + 1) : null), /* @__PURE__ */ React.createElement("button", { style: S.reset, onClick: reset }, "R\xE9initialiser"))), /* @__PURE__ */ React.createElement("section", { style: { ...S.rankCard, boxShadow: `0 0 60px -20px ${t.glow}` }, className: "sr-rankcard" }, /* @__PURE__ */ React.createElement("div", { style: S.badgeWrap, className: "floaty sr-badge" }, /* @__PURE__ */ React.createElement(RankBadge, { tierIndex: rank.tierIndex })), /* @__PURE__ */ React.createElement("div", { style: S.rankInfo, className: "sr-rankinfo" }, /* @__PURE__ */ React.createElement("div", { style: { ...S.tierName, color: t.glow }, className: "sr-tier" }, t.name, !isTop && /* @__PURE__ */ React.createElement("span", { style: S.div }, " ", rank.division)), /* @__PURE__ */ React.createElement("div", { style: S.lpRow, className: "sr-lprow" }, /* @__PURE__ */ React.createElement("div", { style: S.lpBarBg }, /* @__PURE__ */ React.createElement("div", { className: "lp-fill", style: { ...S.lpBarFill, width: `${pct}%`, background: `linear-gradient(90deg, ${t.metal}, ${t.glow})` } })), /* @__PURE__ */ React.createElement("div", { style: S.lpText }, isTop ? `${rank.topLp} LP` : `${rank.lpInDivision} / ${LP_PER_DIVISION} LP`)), /* @__PURE__ */ React.createElement("div", { style: S.totalLine }, totalLp, " LP au total \xB7 ma\xEEtrise globale ", globalPct, "%"), /* @__PURE__ */ React.createElement("div", { style: S.ladder, className: "sr-ladder" }, TIERS.map((ti, i) => /* @__PURE__ */ React.createElement("div", { key: ti.key, title: ti.name, style: {
     ...S.ladderDot,
     background: i <= rank.tierIndex ? ti.glow : "#2a2320",
     boxShadow: i === rank.tierIndex ? `0 0 10px ${ti.glow}` : "none",
@@ -1448,6 +1566,14 @@ const S = {
   totalLine: { fontFamily: "var(--font-ui)", fontSize: 12, color: "#8f8070" },
   ladder: { display: "flex", gap: 10, marginTop: 16, alignItems: "center" },
   ladderDot: { width: 11, height: 11, borderRadius: "50%", transition: "all .3s ease" },
+  clsBloc: { background: "#171210", border: "1px solid #2a221c", borderRadius: 14, padding: 16, marginBottom: 16 },
+  clsLabel: { fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#9c8a76", marginBottom: 8 },
+  clsHint: { fontFamily: "var(--font-ui)", fontSize: 11, color: "#7a6d5e", lineHeight: 1.5, margin: "8px 0" },
+  codeBox: { fontFamily: "ui-monospace, monospace", fontSize: 10, color: "#f2cf5b", background: "#0f0c0a", border: "1px solid #33291f", borderRadius: 10, padding: "10px 12px", wordBreak: "break-all", marginBottom: 10, lineHeight: 1.5 },
+  clsRow: { display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12, border: "1px solid transparent", marginBottom: 6 },
+  clsRowMoi: { background: "rgba(242,207,91,0.06)", borderColor: "rgba(242,207,91,0.28)" },
+  clsPos: { fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 700, width: 26, textAlign: "center", flex: "0 0 auto" },
+  clsDel: { background: "transparent", border: "none", color: "#5b5148", fontSize: 20, cursor: "pointer", padding: "0 4px", lineHeight: 1 },
   archiveBtn: { fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, color: "#9c8a76", background: "transparent", border: "1px solid #4a3d31", borderRadius: 999, padding: "5px 12px", cursor: "pointer", whiteSpace: "nowrap", transition: "border-color .18s ease, color .18s ease" },
   archiveRow: { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid #241d18" },
   archiveThumb: { width: 56, height: 56, objectFit: "cover", borderRadius: 10, flex: "0 0 auto", cursor: "pointer", border: "1px solid #33291f" },
