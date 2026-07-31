@@ -477,11 +477,95 @@ const DEFIS = [
   { txt: "Session flow : 3h d'atelier sans accroc", lp: 30, good: true },
   { txt: "Aiguille cass\xE9e, pause forc\xE9e", lp: -8, good: false }
 ];
+// ═══ Défis de la semaine ═══
+// Banque de défis « à relever ». 10 sont tirés chaque semaine, de façon
+// déterministe (même semaine = même liste), et renouvelés chaque lundi.
+const DEFIS_HEBDO = [
+  { id: "d01", type: "technique", txt: "Couds 30 min par jour pendant 5 jours", lp: 60 },
+  { id: "d02", type: "technique", txt: "Refais 3 fois la m\xEAme finition jusqu'\xE0 la ma\xEEtriser", lp: 45 },
+  { id: "d03", type: "technique", txt: "Termine une pi\xE8ce rest\xE9e en plan", lp: 70 },
+  { id: "d04", type: "technique", txt: "Couds enti\xE8rement sans d\xE9coudre une seule fois", lp: 50 },
+  { id: "d05", type: "technique", txt: "Teste une technique que tu n'as jamais faite", lp: 55 },
+  { id: "d06", type: "technique", txt: "Fais un ourlet invisible impeccable", lp: 35 },
+  { id: "d07", type: "technique", txt: "Couds une pi\xE8ce enti\xE8re dans une chute", lp: 45 },
+  { id: "d08", type: "technique", txt: "Repasse chaque couture avant de passer \xE0 la suivante", lp: 30 },
+  { id: "d09", type: "technique", txt: "R\xE9alise un \xE9chantillon test avant de couper", lp: 25 },
+  { id: "d10", type: "technique", txt: "Couds une pi\xE8ce sans patron du commerce", lp: 65 },
+  { id: "d11", type: "technique", txt: "Range et nettoie enti\xE8rement ton atelier", lp: 30 },
+  { id: "d12", type: "technique", txt: "R\xE9vise et huile ta machine \xE0 coudre", lp: 25 },
+  { id: "d13", type: "technique", txt: "Couds une pi\xE8ce en moins de 3 heures", lp: 50 },
+  { id: "d14", type: "technique", txt: "R\xE9pare ou customise un v\xEAtement existant", lp: 40 },
+  { id: "d15", type: "technique", txt: "Couds avec une mati\xE8re qui te fait peur", lp: 60 },
+  { id: "d16", type: "technique", txt: "Fais 10 boutonni\xE8res parfaitement r\xE9guli\xE8res", lp: 40 },
+  { id: "d17", type: "technique", txt: "Couds une poche que tu n'as jamais essay\xE9e", lp: 45 },
+  { id: "d18", type: "technique", txt: "Termine une pi\xE8ce avec finitions int\xE9rieures propres", lp: 55 },
+  { id: "d19", type: "projet", txt: "Lance un nouveau projet de A \xE0 Z cette semaine", lp: 90 },
+  { id: "d20", type: "projet", txt: "Couds une pi\xE8ce pour quelqu'un d'autre", lp: 80 },
+  { id: "d21", type: "projet", txt: "Cr\xE9e une pi\xE8ce inspir\xE9e d'un d\xE9fil\xE9", lp: 85 },
+  { id: "d22", type: "projet", txt: "Fais une pi\xE8ce enti\xE8rement en upcycling", lp: 75 },
+  { id: "d23", type: "projet", txt: "Couds deux pi\xE8ces qui se portent ensemble", lp: 95 },
+  { id: "d24", type: "projet", txt: "R\xE9alise une pi\xE8ce dans une couleur que tu n'oses jamais", lp: 70 },
+  { id: "d25", type: "projet", txt: "Reproduis une pi\xE8ce de ta garde-robe pr\xE9f\xE9r\xE9e", lp: 85 },
+  { id: "d26", type: "projet", txt: "Termine 2 projets en cours cette semaine", lp: 100 },
+  { id: "d27", type: "dandy", txt: "Publie 3 contenus couture cette semaine", lp: 50 },
+  { id: "d28", type: "dandy", txt: "Fais un live ou une story en cousant", lp: 55 },
+  { id: "d29", type: "dandy", txt: "Photographie proprement une pi\xE8ce finie", lp: 40 },
+  { id: "d30", type: "dandy", txt: "Montre tes coulisses d'atelier en vid\xE9o", lp: 45 },
+  { id: "d31", type: "dandy", txt: "R\xE9ponds \xE0 tous tes messages en attente", lp: 30 },
+  { id: "d32", type: "dandy", txt: "Explique une technique \xE0 ta communaut\xE9", lp: 50 },
+  { id: "d33", type: "dandy", txt: "Demande un retour honn\xEAte sur une pi\xE8ce", lp: 35 },
+  { id: "d34", type: "dandy", txt: "\xC9change avec un autre cr\xE9ateur couture", lp: 45 },
+  { id: "d35", type: "dandy", txt: "Mets une pi\xE8ce en vente", lp: 70 },
+  { id: "d36", type: "dandy", txt: "Note tes id\xE9es de collection pour le mois", lp: 35 }
+];
+const DEFIS_PAR_SEMAINE = 10;
+// Clé ISO de la semaine (ex. "2026-W31") : change automatiquement chaque lundi.
+function getWeekKey(dt) {
+  const d = dt ? new Date(dt) : new Date();
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayNum = (t.getDay() + 6) % 7;
+  t.setDate(t.getDate() - dayNum + 3);
+  const firstThu = new Date(t.getFullYear(), 0, 4);
+  const fNum = (firstThu.getDay() + 6) % 7;
+  firstThu.setDate(firstThu.getDate() - fNum + 3);
+  const week = 1 + Math.round((t - firstThu) / 6048e5);
+  return t.getFullYear() + "-W" + String(week).padStart(2, "0");
+}
+// Jours restants avant le prochain lundi (renouvellement).
+function joursAvantRenouvellement() {
+  const d = new Date();
+  const dayNum = (d.getDay() + 6) % 7;
+  return 7 - dayNum;
+}
+// PRNG déterministe : même semaine => même tirage.
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 1831565813 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function defisDeLaSemaine(weekKey) {
+  const rnd = mulberry32(hashStr(weekKey));
+  const pool = DEFIS_HEBDO.slice();
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+  }
+  return pool.slice(0, DEFIS_PAR_SEMAINE);
+}
 const KEY_PROGRESS = "dandy_atelier_rank";
 const KEY_QUESTS = "dandy_atelier_quests";
 const KEY_QVERSION = "dandy_atelier_quests_version";
 const KEY_JOURNAL = "dandy_atelier_journal";
 const KEY_SPAWN = "dandy_atelier_spawn";
+const KEY_DEFIS = "dandy_atelier_defis_hebdo";
 const QUESTS_VERSION = 5;
 // ═══ Génération auto de quêtes similaires ═══
 // Quand on valide SPAWN_THRESHOLD quêtes du même type ET du même palier de LP,
@@ -760,6 +844,9 @@ function AtelierRank() {
   const [spawnCount, setSpawnCount] = useState({});
   const [showJournal, setShowJournal] = useState(false);
   const [spawnToast, setSpawnToast] = useState(null);
+  const [weekKey] = useState(() => getWeekKey());
+  const [defisSem] = useState(() => defisDeLaSemaine(getWeekKey()));
+  const [defisDone, setDefisDone] = useState({});
   useEffect(() => {
     try {
       const rawQ = localStorage.getItem(KEY_QUESTS);
@@ -817,6 +904,15 @@ function AtelierRank() {
       if (rawS) { const s = JSON.parse(rawS); if (s && typeof s === "object") setSpawnCount(s); }
     } catch (e) {
     }
+    try {
+      const rawD = localStorage.getItem(KEY_DEFIS);
+      if (rawD) {
+        const d = JSON.parse(rawD);
+        // Si on a changé de semaine, on repart de zéro (nouveaux défis).
+        if (d && d.week === getWeekKey() && d.done && typeof d.done === "object") setDefisDone(d.done);
+      }
+    } catch (e) {
+    }
     setLoaded(true);
   }, []);
   const totalPossible = useMemo(() => quests.reduce((s, q) => s + q.lp, 0), [quests]);
@@ -866,6 +962,31 @@ function AtelierRank() {
     if (!loaded) return;
     try { localStorage.setItem(KEY_SPAWN, JSON.stringify(spawnCount)); } catch (e) {}
   }, [spawnCount, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem(KEY_DEFIS, JSON.stringify({ week: weekKey, done: defisDone })); } catch (e) {}
+  }, [defisDone, weekKey, loaded]);
+  const toggleDefi = useCallback((d, ev) => {
+    const wasDone = !!defisDone[d.id];
+    setDefisDone((s) => ({ ...s, [d.id]: !s[d.id] }));
+    if (!wasDone) {
+      setBonusLp((b) => Math.max(0, b + d.lp));
+      setJournal((j) => [{ id: d.id, nom: d.txt, type: d.type, lp: d.lp, ts: Date.now() }, ...j]);
+      if (ev) {
+        const x = ev.clientX || 0, y = ev.clientY || 0;
+        const fid = Date.now() + Math.random();
+        setFlyers((f) => [...f, { id: fid, x, y, lp: d.lp }]);
+        setTimeout(() => setFlyers((f) => f.filter((z) => z.id !== fid)), 1e3);
+      }
+    } else {
+      setBonusLp((b) => Math.max(0, b - d.lp));
+      setJournal((j) => {
+        const idx = j.findIndex((e) => e.id === d.id);
+        if (idx === -1) return j;
+        const c = j.slice(); c.splice(idx, 1); return c;
+      });
+    }
+  }, [defisDone]);
   const spawnSimilar = useCallback((type, lp) => {
     const key = spawnKey(type, lp);
     const bank = QUEST_BANK[key];
@@ -925,6 +1046,7 @@ function AtelierRank() {
       setPromo(null);
       setJournal([]);
       setSpawnCount({});
+      setDefisDone({});
       prevRankRef.current = null;
     }
   };
@@ -972,7 +1094,27 @@ function AtelierRank() {
     background: i <= rank.tierIndex ? ti.glow : "#2a2320",
     boxShadow: i === rank.tierIndex ? `0 0 10px ${ti.glow}` : "none",
     transform: i === rank.tierIndex ? "scale(1.35)" : "scale(1)"
-  } }))))), /* @__PURE__ */ React.createElement("section", { style: S.defiCard }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: S.defiLabel }, "D\xE9fi d'atelier"), /* @__PURE__ */ React.createElement("div", { style: S.defiTxt }, defi ? /* @__PURE__ */ React.createElement("span", { style: { color: defi.good ? "#6fe0cf" : "#e08a6f" } }, defi.txt, " \xB7 ", defi.lp > 0 ? "+" : "", defi.lp, " LP") : "Tire un \xE9v\xE9nement al\xE9atoire de ta session couture.")), /* @__PURE__ */ React.createElement("button", { style: S.rollBtn, onClick: rollDefi }, "Lancer")), /* @__PURE__ */ React.createElement("div", { style: S.toolbar }, /* @__PURE__ */ React.createElement("div", { style: S.tabs }, [["all", "Tout"], ["technique", "Techniques"], ["projet", "Projets"], ["dandy", "Dandy"]].map(([k, l]) => /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => setTab(k), className: "tab-pill", style: { ...S.tab, ...tab === k ? S.tabActive : {} } }, l))), editMode && /* @__PURE__ */ React.createElement("button", { style: S.addBtn, onClick: openNew }, "+ Ajouter une qu\xEAte")), editMode && /* @__PURE__ */ React.createElement("div", { style: S.editHint }, "Mode \xE9dition : touche une carte pour la modifier, ou ajoute-en une nouvelle. Termine l'\xE9dition pour recommencer \xE0 cocher."), /* @__PURE__ */ React.createElement("section", { style: S.grid, className: "sr-grid" }, shown.map((q, idx) => {
+  } }))))), /* @__PURE__ */ React.createElement("section", { style: S.defiCard }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: S.defiLabel }, "Al\xE9a d'atelier"), /* @__PURE__ */ React.createElement("div", { style: S.defiTxt }, defi ? /* @__PURE__ */ React.createElement("span", { style: { color: defi.good ? "#6fe0cf" : "#e08a6f" } }, defi.txt, " \xB7 ", defi.lp > 0 ? "+" : "", defi.lp, " LP") : "Tire un \xE9v\xE9nement al\xE9atoire de ta session couture.")), /* @__PURE__ */ React.createElement("button", { style: S.rollBtn, onClick: rollDefi }, "Lancer")), /* @__PURE__ */ React.createElement("section", { style: S.defisSection },
+  /* @__PURE__ */ React.createElement("div", { style: S.defisHead },
+    /* @__PURE__ */ React.createElement("div", null,
+      /* @__PURE__ */ React.createElement("div", { style: S.defiLabel }, "D\xE9fis de la semaine"),
+      /* @__PURE__ */ React.createElement("div", { style: S.defisSub }, "Choisis ceux que tu rel\xE8ves \xB7 nouvelle s\xE9lection dans ", joursAvantRenouvellement(), " jour", joursAvantRenouvellement() > 1 ? "s" : "")),
+    /* @__PURE__ */ React.createElement("div", { style: S.defisCount }, defisSem.filter((d) => defisDone[d.id]).length, "/", defisSem.length)),
+  /* @__PURE__ */ React.createElement("div", { style: S.defisScroll, className: "defis-scroll" }, defisSem.map((d) => {
+    const on = !!defisDone[d.id];
+    const acc = (QUEST_TYPES[d.type] || QUEST_TYPES.technique).accent;
+    return /* @__PURE__ */ React.createElement("button", {
+      key: d.id,
+      onClick: (ev) => toggleDefi(d, ev),
+      className: "defi-card",
+      style: { ...S.defiItem, borderLeft: `3px solid ${acc}`, ...on ? S.defiItemDone : {} }
+    },
+      /* @__PURE__ */ React.createElement("span", { style: { ...S.qType, background: (QUEST_TYPES[d.type] || QUEST_TYPES.technique).bg, alignSelf: "flex-start" } }, (QUEST_TYPES[d.type] || QUEST_TYPES.technique).short),
+      /* @__PURE__ */ React.createElement("div", { style: { ...S.defiItemTxt, ...on ? { opacity: .55, textDecoration: "line-through" } : {} } }, d.txt),
+      /* @__PURE__ */ React.createElement("div", { style: S.defiItemFoot },
+        /* @__PURE__ */ React.createElement("span", { style: S.qLp }, "+", d.lp, " LP"),
+        /* @__PURE__ */ React.createElement("span", { style: { ...S.defiTick, ...on ? S.defiTickOn : {} } }, on ? "\u2713 Relev\xE9" : "Relever")));
+  }))), /* @__PURE__ */ React.createElement("div", { style: S.toolbar }, /* @__PURE__ */ React.createElement("div", { style: S.tabs }, [["all", "Tout"], ["technique", "Techniques"], ["projet", "Projets"], ["dandy", "Dandy"]].map(([k, l]) => /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => setTab(k), className: "tab-pill", style: { ...S.tab, ...tab === k ? S.tabActive : {} } }, l))), editMode && /* @__PURE__ */ React.createElement("button", { style: S.addBtn, onClick: openNew }, "+ Ajouter une qu\xEAte")), editMode && /* @__PURE__ */ React.createElement("div", { style: S.editHint }, "Mode \xE9dition : touche une carte pour la modifier, ou ajoute-en une nouvelle. Termine l'\xE9dition pour recommencer \xE0 cocher."), /* @__PURE__ */ React.createElement("section", { style: S.grid, className: "sr-grid" }, shown.map((q, idx) => {
     const on = !!done[q.id];
     const cls = "quest quest-in" + (justId === q.id ? " quest-just" : "");
     const tutoList = q.tutos || [];
@@ -1005,6 +1147,11 @@ const CSS = `
 .sr-tier { font-family: var(--font-display); font-weight: 900 !important; letter-spacing: -0.015em !important; }
 .tab-pill { transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease; }
 .tab-pill:hover { transform: translateY(-1px); border-color: #6a5a4a; }
+.defi-card:hover { transform: translateY(-3px); border-color: #6a5a4a; }
+.defis-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #4a3d31 transparent; }
+.defis-scroll::-webkit-scrollbar { height: 6px; }
+.defis-scroll::-webkit-scrollbar-track { background: transparent; }
+.defis-scroll::-webkit-scrollbar-thumb { background: #4a3d31; border-radius: 999px; }
 .quest:focus-visible { outline: 2px solid #f2cf5b; outline-offset: 2px; }
 /* apparition en cascade des cartes */
 @keyframes cardIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -1066,6 +1213,17 @@ const S = {
   totalLine: { fontFamily: "var(--font-ui)", fontSize: 12, color: "#8f8070" },
   ladder: { display: "flex", gap: 10, marginTop: 16, alignItems: "center" },
   ladderDot: { width: 11, height: 11, borderRadius: "50%", transition: "all .3s ease" },
+  defisSection: { marginBottom: 26 },
+  defisHead: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, marginBottom: 12 },
+  defisSub: { fontFamily: "var(--font-ui)", fontSize: 12, color: "#8f8070", marginTop: 3 },
+  defisCount: { fontFamily: "var(--font-ui)", fontSize: 13, fontWeight: 700, color: "#f2cf5b", background: "rgba(242,207,91,0.10)", border: "1px solid rgba(242,207,91,0.28)", borderRadius: 999, padding: "4px 12px", whiteSpace: "nowrap" },
+  defisScroll: { display: "flex", gap: 12, overflowX: "auto", paddingBottom: 8, scrollSnapType: "x mandatory" },
+  defiItem: { flex: "0 0 210px", scrollSnapAlign: "start", display: "flex", flexDirection: "column", gap: 10, textAlign: "left", background: "#1b1512", border: "1px solid #33291f", borderRadius: 14, padding: "14px 16px", color: "#ece3d8", cursor: "pointer", transition: "transform .18s ease, border-color .18s ease, background .18s ease" },
+  defiItemDone: { background: "#16211b", borderColor: "#2f5a45" },
+  defiItemTxt: { fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 500, lineHeight: 1.3, flex: 1 },
+  defiItemFoot: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  defiTick: { fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: "#9c8a76", border: "1px solid #4a3d31", borderRadius: 999, padding: "3px 10px" },
+  defiTickOn: { color: "#6fe0cf", borderColor: "#2f5a45", background: "rgba(111,224,207,0.08)" },
   defiCard: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, background: "#1b1512", border: "1px solid #33291f", borderRadius: 14, padding: "16px 20px", marginBottom: 24, flexWrap: "wrap" },
   defiLabel: { fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: "0.2em", color: "#9c8a76", marginBottom: 4 },
   defiTxt: { fontFamily: "var(--font-ui)", fontSize: 14 },
