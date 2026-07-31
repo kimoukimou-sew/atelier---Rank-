@@ -381,7 +381,7 @@ var d=null!=c&&c.hydratedSources||null,e=!1,f="",g=aj;null!==c&&void 0!==c&&(!0=
 function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmountComponentAtNode=function(a){if(!Vd(a))throw Error(m(40));return a._reactRootContainer?(yb(function(){Wd(null,null,a,!1,function(){a._reactRootContainer=null;a[Ja]=null})}),!0):!1};Q.unstable_batchedUpdates=Tf;Q.unstable_renderSubtreeIntoContainer=function(a,b,c,d){if(!Vd(c))throw Error(m(200));if(null==a||void 0===a._reactInternals)throw Error(m(38));return Wd(a,b,c,!1,d)};Q.version="18.3.1-next-f1338f8080-20240426"});
 })();
 </script>
-<script>const { useState, useEffect, useMemo, useCallback } = React;
+<script>const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const TIERS = [
   { key: "fer", name: "Fer", metal: "#5b5148", glow: "#7a6d5e" },
   { key: "bronze", name: "Bronze", metal: "#9c5a2f", glow: "#c47a44" },
@@ -566,6 +566,83 @@ const KEY_QVERSION = "dandy_atelier_quests_version";
 const KEY_JOURNAL = "dandy_atelier_journal";
 const KEY_SPAWN = "dandy_atelier_spawn";
 const KEY_DEFIS = "dandy_atelier_defis_hebdo";
+const KEY_DEFIS_ARCHIVE = "dandy_atelier_defis_archive";
+// ═══ Photos des défis (IndexedDB) ═══
+// Les photos sont trop lourdes pour localStorage : on les range dans IndexedDB,
+// après compression. Si IndexedDB est indisponible, l'appli continue sans photos.
+const PHOTO_DB = "dandy_atelier_photos";
+const PHOTO_STORE = "photos";
+let _photoDbPromise = null;
+function photoDB() {
+  if (_photoDbPromise) return _photoDbPromise;
+  _photoDbPromise = new Promise((resolve, reject) => {
+    try {
+      if (typeof indexedDB === "undefined") return reject(new Error("no-idb"));
+      const req = indexedDB.open(PHOTO_DB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("idb-open"));
+    } catch (e) { reject(e); }
+  });
+  return _photoDbPromise;
+}
+function photoSet(key, dataUrl) {
+  return photoDB().then((db) => new Promise((res, rej) => {
+    const tx = db.transaction(PHOTO_STORE, "readwrite");
+    tx.objectStore(PHOTO_STORE).put(dataUrl, key);
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => rej(tx.error);
+  }));
+}
+function photoDel(key) {
+  return photoDB().then((db) => new Promise((res, rej) => {
+    const tx = db.transaction(PHOTO_STORE, "readwrite");
+    tx.objectStore(PHOTO_STORE).delete(key);
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => rej(tx.error);
+  }));
+}
+function photoLoadAll() {
+  return photoDB().then((db) => new Promise((res, rej) => {
+    const out = {};
+    const tx = db.transaction(PHOTO_STORE, "readonly");
+    const store = tx.objectStore(PHOTO_STORE);
+    const req = store.openCursor();
+    req.onsuccess = () => {
+      const cur = req.result;
+      if (cur) { out[cur.key] = cur.value; cur.continue(); } else res(out);
+    };
+    req.onerror = () => rej(req.error);
+  }));
+}
+// Compresse une photo : redimensionne au max 900px et exporte en JPEG léger.
+function compressImage(file, maxSize, quality) {
+  maxSize = maxSize || 900;
+  quality = quality || 0.7;
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > h && w > maxSize) { h = h * maxSize / w; w = maxSize; }
+        else if (h >= w && h > maxSize) { w = w * maxSize / h; h = maxSize; }
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(w); cv.height = Math.round(h);
+        const ctx = cv.getContext("2d");
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        try { resolve(cv.toDataURL("image/jpeg", quality)); } catch (e) { reject(e); }
+      };
+      img.onerror = () => reject(new Error("img-decode"));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error("file-read"));
+    reader.readAsDataURL(file);
+  });
+}
 const QUESTS_VERSION = 5;
 // ═══ Génération auto de quêtes similaires ═══
 // Quand on valide SPAWN_THRESHOLD quêtes du même type ET du même palier de LP,
@@ -799,7 +876,7 @@ function fmtDate(ts) {
     return "";
   }
 }
-function JournalPanel({ journal, onClose }) {
+function JournalPanel({ journal, photos, onPhoto, onClose }) {
   const groups = [];
   let curDay = null, curArr = null;
   journal.forEach((e) => {
@@ -820,10 +897,97 @@ function JournalPanel({ journal, onClose }) {
             React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#7a6d5e", marginBottom: 8 } }, g.day),
             g.items.map((e, ei) => React.createElement("div", { key: ei, style: S.journalRow },
               React.createElement("span", { style: { ...S.qType, background: (QUEST_TYPES[e.type] || QUEST_TYPES.technique).bg, flex: "0 0 auto" } }, (QUEST_TYPES[e.type] || QUEST_TYPES.technique).short),
+              (e.photoKey && photos && photos[e.photoKey]) ? React.createElement("img", { src: photos[e.photoKey], alt: "", style: S.journalThumb, onClick: () => onPhoto && onPhoto({ key: e.photoKey, src: photos[e.photoKey], nom: e.nom }) }) : null,
               React.createElement("div", { style: { flex: 1, minWidth: 0 } },
                 React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 14, color: "#ece3d8", lineHeight: 1.3 } }, e.nom),
                 React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, color: "#7a6d5e" } }, fmtDate(e.ts))),
               React.createElement("span", { style: { ...S.qLp, flex: "0 0 auto" } }, "+", e.lp))))))
+  ));
+}
+function weekLabel(wk) {
+  const m = /^(\d{4})-W(\d{2})$/.exec(wk || "");
+  if (!m) return wk || "";
+  const year = +m[1], week = +m[2];
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = (jan4.getDay() + 6) % 7;
+  const monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - jan4Day + (week - 1) * 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const f = (d, withYear) => d.toLocaleDateString("fr-FR", withYear ? { day: "numeric", month: "short", year: "numeric" } : { day: "numeric", month: "short" });
+  return "Semaine du " + f(monday, false) + " au " + f(sunday, true);
+}
+function ArchivePanel({ archive, photos, onPhoto, onAddPhoto, onClose }) {
+  const groups = [];
+  let curWeek = null, curArr = null;
+  archive.forEach((e) => {
+    if (e.week !== curWeek) { curWeek = e.week; curArr = []; groups.push({ week: e.week, items: curArr }); }
+    curArr.push(e);
+  });
+  const totalLp = archive.reduce((s, e) => s + (e.lp || 0), 0);
+  const nbPhotos = archive.filter((e) => photos && photos[e.photoKey]).length;
+  return React.createElement("div", { style: S.modalBg, onClick: onClose }, React.createElement("div", { style: { ...S.modal, maxWidth: 560, maxHeight: "84vh", display: "flex", flexDirection: "column" }, onClick: (e) => e.stopPropagation() },
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 } },
+      React.createElement("div", { style: S.modalTitle }, "Tous les d\xE9fis relev\xE9s"),
+      React.createElement("button", { style: S.ghostBtn, onClick: onClose }, "Fermer")),
+    React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 12, color: "#9c8a76", marginBottom: 14 } }, archive.length, " d\xE9fi", archive.length > 1 ? "s" : "", " relev\xE9", archive.length > 1 ? "s" : "", " \xB7 ", totalLp, " LP \xB7 ", nbPhotos, " photo", nbPhotos > 1 ? "s" : ""),
+    React.createElement("div", { style: { overflowY: "auto", paddingRight: 4 } },
+      archive.length === 0
+        ? React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 14, color: "#8f8070", textAlign: "center", padding: "30px 0" } }, "Aucun d\xE9fi relev\xE9 pour l'instant. Rel\xE8ve ton premier d\xE9fi de la semaine pour commencer l'archive.")
+        : groups.map((g, gi) => React.createElement("div", { key: gi, style: { marginBottom: 20 } },
+            React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "#7a6d5e", marginBottom: 8 } }, weekLabel(g.week)),
+            g.items.map((e, ei) => {
+              const pic = photos && photos[e.photoKey];
+              const t = QUEST_TYPES[e.type] || QUEST_TYPES.technique;
+              return React.createElement("div", { key: ei, style: S.archiveRow },
+                pic
+                  ? React.createElement("img", { src: pic, alt: "", style: S.archiveThumb, onClick: () => onPhoto && onPhoto({ key: e.photoKey, src: pic, nom: e.txt }) })
+                  : React.createElement("button", { style: S.archiveAdd, onClick: () => onAddPhoto && onAddPhoto(e.photoKey), title: "Ajouter une photo" }, "\uD83D\uDCF7"),
+                React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 3 } },
+                    React.createElement("span", { style: { ...S.qType, background: t.bg } }, t.short),
+                    React.createElement("span", { style: { ...S.qLp } }, "+", e.lp, " LP")),
+                  React.createElement("div", { style: { fontFamily: "var(--font-display)", fontSize: 15, color: "#ece3d8", lineHeight: 1.3 } }, e.txt),
+                  React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, color: "#7a6d5e", marginTop: 2 } }, fmtDate(e.ts))));
+            }))))
+  ));
+}
+function QuetesPanel({ quests, done, photos, journal, onPhoto, onAddPhoto, onClose }) {
+  const faites = quests.filter((q) => done[q.id]);
+  // Date de validation si on la connaît (via le carnet)
+  const tsMap = {};
+  (journal || []).forEach((e) => { if (tsMap[e.id] === void 0) tsMap[e.id] = e.ts; });
+  const ordre = ["technique", "projet", "dandy"];
+  const groups = ordre.map((t) => ({ type: t, items: faites.filter((q) => q.type === t) })).filter((g) => g.items.length);
+  const totalLp = faites.reduce((s, q) => s + (q.lp || 0), 0);
+  const nbPhotos = faites.filter((q) => photos && photos["quest:" + q.id]).length;
+  return React.createElement("div", { style: S.modalBg, onClick: onClose }, React.createElement("div", { style: { ...S.modal, maxWidth: 560, maxHeight: "84vh", display: "flex", flexDirection: "column" }, onClick: (e) => e.stopPropagation() },
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 } },
+      React.createElement("div", { style: S.modalTitle }, "Qu\xEAtes compl\xE9t\xE9es"),
+      React.createElement("button", { style: S.ghostBtn, onClick: onClose }, "Fermer")),
+    React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 12, color: "#9c8a76", marginBottom: 14 } }, faites.length, " qu\xEAte", faites.length > 1 ? "s" : "", " \xB7 ", totalLp, " LP \xB7 ", nbPhotos, " photo", nbPhotos > 1 ? "s" : ""),
+    React.createElement("div", { style: { overflowY: "auto", paddingRight: 4 } },
+      faites.length === 0
+        ? React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 14, color: "#8f8070", textAlign: "center", padding: "30px 0" } }, "Aucune qu\xEAte compl\xE9t\xE9e pour l'instant. Coche ta premi\xE8re qu\xEAte pour la retrouver ici.")
+        : groups.map((g, gi) => {
+            const t = QUEST_TYPES[g.type] || QUEST_TYPES.technique;
+            return React.createElement("div", { key: gi, style: { marginBottom: 20 } },
+              React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "#7a6d5e", marginBottom: 8 } }, t.label, " \xB7 ", g.items.length),
+              g.items.map((q, qi) => {
+                const pKey = "quest:" + q.id;
+                const pic = photos && photos[pKey];
+                return React.createElement("div", { key: qi, style: S.archiveRow },
+                  pic
+                    ? React.createElement("img", { src: pic, alt: "", style: S.archiveThumb, onClick: () => onPhoto && onPhoto({ key: pKey, src: pic, nom: q.nom }) })
+                    : React.createElement("button", { style: S.archiveAdd, onClick: () => onAddPhoto && onAddPhoto(pKey), title: "Ajouter une photo" }, "\uD83D\uDCF7"),
+                  React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 3 } },
+                      React.createElement("span", { style: { ...S.qType, background: t.bg } }, t.short),
+                      React.createElement("span", { style: { ...S.qLp } }, "+", q.lp, " LP")),
+                    React.createElement("div", { style: { fontFamily: "var(--font-display)", fontSize: 15, color: "#ece3d8", lineHeight: 1.3 } }, q.nom),
+                    React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, color: "#7a6d5e", marginTop: 2 } }, q.note ? q.note + (tsMap[q.id] ? " \xB7 " : "") : "", tsMap[q.id] ? fmtDate(tsMap[q.id]) : "")));
+              }));
+          }))
   ));
 }
 function AtelierRank() {
@@ -847,6 +1011,14 @@ function AtelierRank() {
   const [weekKey] = useState(() => getWeekKey());
   const [defisSem] = useState(() => defisDeLaSemaine(getWeekKey()));
   const [defisDone, setDefisDone] = useState({});
+  const [photos, setPhotos] = useState({});
+  const [defisArchive, setDefisArchive] = useState([]);
+  const [showArchive, setShowArchive] = useState(false);
+  const [showQuetes, setShowQuetes] = useState(false);
+  const [photoView, setPhotoView] = useState(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const fileInputRef = useRef(null);
+  const pendingPhotoKey = useRef(null);
   useEffect(() => {
     try {
       const rawQ = localStorage.getItem(KEY_QUESTS);
@@ -913,7 +1085,17 @@ function AtelierRank() {
       }
     } catch (e) {
     }
+    try {
+      const rawA = localStorage.getItem(KEY_DEFIS_ARCHIVE);
+      if (rawA) { const a = JSON.parse(rawA); if (Array.isArray(a)) setDefisArchive(a); }
+    } catch (e) {
+    }
     setLoaded(true);
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    photoLoadAll().then((p) => { if (alive) setPhotos(p); }).catch(() => {});
+    return () => { alive = false; };
   }, []);
   const totalPossible = useMemo(() => quests.reduce((s, q) => s + q.lp, 0), [quests]);
   const questLp = useMemo(
@@ -966,12 +1148,47 @@ function AtelierRank() {
     if (!loaded) return;
     try { localStorage.setItem(KEY_DEFIS, JSON.stringify({ week: weekKey, done: defisDone })); } catch (e) {}
   }, [defisDone, weekKey, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem(KEY_DEFIS_ARCHIVE, JSON.stringify(defisArchive)); } catch (e) {}
+  }, [defisArchive, loaded]);
+  const askPhoto = useCallback((key) => {
+    pendingPhotoKey.current = key;
+    if (fileInputRef.current) { fileInputRef.current.value = ""; fileInputRef.current.click(); }
+  }, []);
+  const onPhotoPicked = useCallback((ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    const key = pendingPhotoKey.current;
+    if (!file || !key) return;
+    setPhotoBusy(true);
+    compressImage(file, 900, 0.7).then((dataUrl) => {
+      return photoSet(key, dataUrl).then(() => {
+        setPhotos((p) => ({ ...p, [key]: dataUrl }));
+      });
+    }).catch(() => {
+      window.alert("Impossible d'enregistrer la photo sur cet appareil.");
+    }).then(() => {
+      setPhotoBusy(false);
+      pendingPhotoKey.current = null;
+    });
+  }, []);
+  const removePhoto = useCallback((key) => {
+    if (!window.confirm("Supprimer cette photo ?")) return;
+    photoDel(key).catch(() => {});
+    setPhotos((p) => { const c = { ...p }; delete c[key]; return c; });
+    setPhotoView(null);
+  }, []);
   const toggleDefi = useCallback((d, ev) => {
     const wasDone = !!defisDone[d.id];
+    const pKey = weekKey + ":" + d.id;
     setDefisDone((s) => ({ ...s, [d.id]: !s[d.id] }));
     if (!wasDone) {
       setBonusLp((b) => Math.max(0, b + d.lp));
-      setJournal((j) => [{ id: d.id, nom: d.txt, type: d.type, lp: d.lp, ts: Date.now() }, ...j]);
+      setJournal((j) => [{ id: d.id, nom: d.txt, type: d.type, lp: d.lp, ts: Date.now(), photoKey: pKey }, ...j]);
+      setDefisArchive((a) => {
+        if (a.some((x) => x.week === weekKey && x.defiId === d.id)) return a;
+        return [{ defiId: d.id, txt: d.txt, type: d.type, lp: d.lp, week: weekKey, ts: Date.now(), photoKey: pKey }, ...a];
+      });
       if (ev) {
         const x = ev.clientX || 0, y = ev.clientY || 0;
         const fid = Date.now() + Math.random();
@@ -985,8 +1202,9 @@ function AtelierRank() {
         if (idx === -1) return j;
         const c = j.slice(); c.splice(idx, 1); return c;
       });
+      setDefisArchive((a) => a.filter((x) => !(x.week === weekKey && x.defiId === d.id)));
     }
-  }, [defisDone]);
+  }, [defisDone, weekKey]);
   const spawnSimilar = useCallback((type, lp) => {
     const key = spawnKey(type, lp);
     const bank = QUEST_BANK[key];
@@ -1039,7 +1257,7 @@ function AtelierRank() {
     setBonusLp((b) => Math.max(0, b + d.lp));
   };
   const reset = () => {
-    if (window.confirm("R\xE9initialiser ta PROGRESSION ? (tes qu\xEAtes personnalis\xE9es sont conserv\xE9es, le journal est effac\xE9)")) {
+    if (window.confirm("R\xE9initialiser ta PROGRESSION ? (tes qu\xEAtes personnalis\xE9es et tes photos sont conserv\xE9es, le journal et l'archive des d\xE9fis sont effac\xE9s)")) {
       setDone({});
       setBonusLp(0);
       setDefi(null);
@@ -1047,6 +1265,7 @@ function AtelierRank() {
       setJournal([]);
       setSpawnCount({});
       setDefisDone({});
+      setDefisArchive([]);
       prevRankRef.current = null;
     }
   };
@@ -1074,7 +1293,13 @@ function AtelierRank() {
   const shown = quests.filter((q) => tab === "all" || q.type === tab);
   const globalPct = totalPossible ? Math.round(questLp / totalPossible * 100) : 0;
   const doneCount = quests.filter((q) => done[q.id]).length;
-  return /* @__PURE__ */ React.createElement("div", { style: S.root, className: "sr-root" }, /* @__PURE__ */ React.createElement("style", null, CSS), /* @__PURE__ */ React.createElement(Confetti, { show: confetti }), /* @__PURE__ */ React.createElement(PromotionScreen, { promo, onClose: () => setPromo(null) }), showJournal && /* @__PURE__ */ React.createElement(JournalPanel, { journal, onClose: () => setShowJournal(false) }), spawnToast && /* @__PURE__ */ React.createElement("div", { style: S.spawnToast, className: "spawn-toast", onClick: () => setSpawnToast(null) }, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: "0.16em", color: "#6fe0cf", marginBottom: 4 } }, "\u2728 NOUVELLE QU\xCATE D\xC9BLOQU\xC9E"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 14, color: "#ece3d8" } }, spawnToast.nom)), tutoModal && /* @__PURE__ */ React.createElement("div", { style: S.modalBg, onClick: () => setTutoModal(null) }, /* @__PURE__ */ React.createElement("div", { style: S.modal, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { style: S.modalTitle }, "Tutoriels"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 13, color: "#a89985", marginBottom: 14, lineHeight: 1.35 } }, tutoModal.nom), (tutoModal.tutos || []).map((t, i) => /* @__PURE__ */ React.createElement("a", { key: i, href: t.url, target: "_blank", rel: "noopener noreferrer", style: S.tutoLink }, /* @__PURE__ */ React.createElement("span", null, "\u25b8 ", t.label || t.url), /* @__PURE__ */ React.createElement("span", { style: { color: "#7a6d5e", fontSize: 12 } }, "\u2197"))), /* @__PURE__ */ React.createElement("div", { style: S.modalActions }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => setTutoModal(null) }, "Fermer")))), editing && /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { style: S.root, className: "sr-root" }, /* @__PURE__ */ React.createElement("style", null, CSS), /* @__PURE__ */ React.createElement(Confetti, { show: confetti }), /* @__PURE__ */ React.createElement(PromotionScreen, { promo, onClose: () => setPromo(null) }), /* @__PURE__ */ React.createElement("input", { ref: fileInputRef, type: "file", accept: "image/*", onChange: onPhotoPicked, style: { display: "none" } }), photoView && /* @__PURE__ */ React.createElement("div", { style: S.modalBg, onClick: () => setPhotoView(null) }, /* @__PURE__ */ React.createElement("div", { style: { ...S.modal, maxWidth: 520, padding: 16 }, onClick: (e) => e.stopPropagation() },
+  /* @__PURE__ */ React.createElement("img", { src: photoView.src, alt: "", style: { width: "100%", borderRadius: 12, display: "block" } }),
+  /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-display)", fontSize: 16, margin: "12px 2px 14px", color: "#ece3d8" } }, photoView.nom),
+  /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, justifyContent: "flex-end" } },
+    /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => removePhoto(photoView.key) }, "Supprimer"),
+    /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => { setPhotoView(null); askPhoto(photoView.key); } }, "Remplacer"),
+    /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => setPhotoView(null) }, "Fermer")))), showJournal && /* @__PURE__ */ React.createElement(JournalPanel, { journal, photos, onPhoto: setPhotoView, onClose: () => setShowJournal(false) }), showArchive && /* @__PURE__ */ React.createElement(ArchivePanel, { archive: defisArchive, photos, onPhoto: setPhotoView, onAddPhoto: askPhoto, onClose: () => setShowArchive(false) }), showQuetes && /* @__PURE__ */ React.createElement(QuetesPanel, { quests, done, photos, journal, onPhoto: setPhotoView, onAddPhoto: askPhoto, onClose: () => setShowQuetes(false) }), spawnToast && /* @__PURE__ */ React.createElement("div", { style: S.spawnToast, className: "spawn-toast", onClick: () => setSpawnToast(null) }, /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 11, letterSpacing: "0.16em", color: "#6fe0cf", marginBottom: 4 } }, "\u2728 NOUVELLE QU\xCATE D\xC9BLOQU\xC9E"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 14, color: "#ece3d8" } }, spawnToast.nom)), tutoModal && /* @__PURE__ */ React.createElement("div", { style: S.modalBg, onClick: () => setTutoModal(null) }, /* @__PURE__ */ React.createElement("div", { style: S.modal, onClick: (e) => e.stopPropagation() }, /* @__PURE__ */ React.createElement("div", { style: S.modalTitle }, "Tutoriels"), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "var(--font-ui)", fontSize: 13, color: "#a89985", marginBottom: 14, lineHeight: 1.35 } }, tutoModal.nom), (tutoModal.tutos || []).map((t, i) => /* @__PURE__ */ React.createElement("a", { key: i, href: t.url, target: "_blank", rel: "noopener noreferrer", style: S.tutoLink }, /* @__PURE__ */ React.createElement("span", null, "\u25b8 ", t.label || t.url), /* @__PURE__ */ React.createElement("span", { style: { color: "#7a6d5e", fontSize: 12 } }, "\u2197"))), /* @__PURE__ */ React.createElement("div", { style: S.modalActions }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1 } }), /* @__PURE__ */ React.createElement("button", { style: S.ghostBtn, onClick: () => setTutoModal(null) }, "Fermer")))), editing && /* @__PURE__ */ React.createElement(
     QuestEditor,
     {
       quest: editing,
@@ -1099,22 +1324,30 @@ function AtelierRank() {
     /* @__PURE__ */ React.createElement("div", null,
       /* @__PURE__ */ React.createElement("div", { style: S.defiLabel }, "D\xE9fis de la semaine"),
       /* @__PURE__ */ React.createElement("div", { style: S.defisSub }, "Choisis ceux que tu rel\xE8ves \xB7 nouvelle s\xE9lection dans ", joursAvantRenouvellement(), " jour", joursAvantRenouvellement() > 1 ? "s" : "")),
-    /* @__PURE__ */ React.createElement("div", { style: S.defisCount }, defisSem.filter((d) => defisDone[d.id]).length, "/", defisSem.length)),
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+      /* @__PURE__ */ React.createElement("button", { style: S.archiveBtn, onClick: () => setShowArchive(true) }, "\uD83D\uDDC2 Tous les d\xE9fis relev\xE9s", defisArchive.length ? /* @__PURE__ */ React.createElement("span", { style: S.journalCount }, defisArchive.length) : null),
+      /* @__PURE__ */ React.createElement("div", { style: S.defisCount }, defisSem.filter((d) => defisDone[d.id]).length, "/", defisSem.length))),
   /* @__PURE__ */ React.createElement("div", { style: S.defisScroll, className: "defis-scroll" }, defisSem.map((d) => {
     const on = !!defisDone[d.id];
     const acc = (QUEST_TYPES[d.type] || QUEST_TYPES.technique).accent;
-    return /* @__PURE__ */ React.createElement("button", {
+    const pKey = weekKey + ":" + d.id;
+    const pic = photos[pKey];
+    return /* @__PURE__ */ React.createElement("div", {
       key: d.id,
-      onClick: (ev) => toggleDefi(d, ev),
       className: "defi-card",
       style: { ...S.defiItem, borderLeft: `3px solid ${acc}`, ...on ? S.defiItemDone : {} }
     },
-      /* @__PURE__ */ React.createElement("span", { style: { ...S.qType, background: (QUEST_TYPES[d.type] || QUEST_TYPES.technique).bg, alignSelf: "flex-start" } }, (QUEST_TYPES[d.type] || QUEST_TYPES.technique).short),
-      /* @__PURE__ */ React.createElement("div", { style: { ...S.defiItemTxt, ...on ? { opacity: .55, textDecoration: "line-through" } : {} } }, d.txt),
-      /* @__PURE__ */ React.createElement("div", { style: S.defiItemFoot },
-        /* @__PURE__ */ React.createElement("span", { style: S.qLp }, "+", d.lp, " LP"),
-        /* @__PURE__ */ React.createElement("span", { style: { ...S.defiTick, ...on ? S.defiTickOn : {} } }, on ? "\u2713 Relev\xE9" : "Relever")));
-  }))), /* @__PURE__ */ React.createElement("div", { style: S.toolbar }, /* @__PURE__ */ React.createElement("div", { style: S.tabs }, [["all", "Tout"], ["technique", "Techniques"], ["projet", "Projets"], ["dandy", "Dandy"]].map(([k, l]) => /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => setTab(k), className: "tab-pill", style: { ...S.tab, ...tab === k ? S.tabActive : {} } }, l))), editMode && /* @__PURE__ */ React.createElement("button", { style: S.addBtn, onClick: openNew }, "+ Ajouter une qu\xEAte")), editMode && /* @__PURE__ */ React.createElement("div", { style: S.editHint }, "Mode \xE9dition : touche une carte pour la modifier, ou ajoute-en une nouvelle. Termine l'\xE9dition pour recommencer \xE0 cocher."), /* @__PURE__ */ React.createElement("section", { style: S.grid, className: "sr-grid" }, shown.map((q, idx) => {
+      /* @__PURE__ */ React.createElement("div", { onClick: (ev) => toggleDefi(d, ev), style: { display: "flex", flexDirection: "column", gap: 10, flex: 1, cursor: "pointer" } },
+        /* @__PURE__ */ React.createElement("span", { style: { ...S.qType, background: (QUEST_TYPES[d.type] || QUEST_TYPES.technique).bg, alignSelf: "flex-start" } }, (QUEST_TYPES[d.type] || QUEST_TYPES.technique).short),
+        /* @__PURE__ */ React.createElement("div", { style: { ...S.defiItemTxt, ...on ? { opacity: .55, textDecoration: "line-through" } : {} } }, d.txt),
+        /* @__PURE__ */ React.createElement("div", { style: S.defiItemFoot },
+          /* @__PURE__ */ React.createElement("span", { style: S.qLp }, "+", d.lp, " LP"),
+          /* @__PURE__ */ React.createElement("span", { style: { ...S.defiTick, ...on ? S.defiTickOn : {} } }, on ? "\u2713 Relev\xE9" : "Relever"))),
+      pic ? /* @__PURE__ */ React.createElement("div", { style: S.photoThumbWrap },
+        /* @__PURE__ */ React.createElement("img", { src: pic, alt: "Photo du d\xE9fi", style: S.photoThumb, onClick: () => setPhotoView({ key: pKey, src: pic, nom: d.txt }) }),
+        /* @__PURE__ */ React.createElement("button", { style: S.photoChange, onClick: () => askPhoto(pKey), title: "Remplacer la photo" }, "\u21BB"))
+        : /* @__PURE__ */ React.createElement("button", { style: S.photoBtn, onClick: () => askPhoto(pKey), disabled: photoBusy }, photoBusy ? "\u2026" : "\uD83D\uDCF7 Ajouter une photo"));
+  }))), /* @__PURE__ */ React.createElement("div", { style: S.toolbar }, /* @__PURE__ */ React.createElement("div", { style: S.tabs }, [["all", "Tout"], ["technique", "Techniques"], ["projet", "Projets"], ["dandy", "Dandy"]].map(([k, l]) => /* @__PURE__ */ React.createElement("button", { key: k, onClick: () => setTab(k), className: "tab-pill", style: { ...S.tab, ...tab === k ? S.tabActive : {} } }, l))), editMode && /* @__PURE__ */ React.createElement("button", { style: S.addBtn, onClick: openNew }, "+ Ajouter une qu\xEAte"), !editMode && /* @__PURE__ */ React.createElement("button", { style: S.archiveBtn, onClick: () => setShowQuetes(true) }, "\u2705 Qu\xEAtes compl\xE9t\xE9es", doneCount ? /* @__PURE__ */ React.createElement("span", { style: S.journalCount }, doneCount) : null)), editMode && /* @__PURE__ */ React.createElement("div", { style: S.editHint }, "Mode \xE9dition : touche une carte pour la modifier, ou ajoute-en une nouvelle. Termine l'\xE9dition pour recommencer \xE0 cocher."), /* @__PURE__ */ React.createElement("section", { style: S.grid, className: "sr-grid" }, shown.map((q, idx) => {
     const on = !!done[q.id];
     const cls = "quest quest-in" + (justId === q.id ? " quest-just" : "");
     const tutoList = q.tutos || [];
@@ -1148,6 +1381,8 @@ const CSS = `
 .tab-pill { transition: background .18s ease, color .18s ease, border-color .18s ease, transform .12s ease; }
 .tab-pill:hover { transform: translateY(-1px); border-color: #6a5a4a; }
 .defi-card:hover { transform: translateY(-3px); border-color: #6a5a4a; }
+.defi-card button[style*="dashed"]:hover { border-color: #f2cf5b !important; color: #f2cf5b !important; }
+.sr-archive-btn:hover, button[style*="dashed"]:hover { border-color: #f2cf5b !important; }
 .defis-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: #4a3d31 transparent; }
 .defis-scroll::-webkit-scrollbar { height: 6px; }
 .defis-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -1213,6 +1448,15 @@ const S = {
   totalLine: { fontFamily: "var(--font-ui)", fontSize: 12, color: "#8f8070" },
   ladder: { display: "flex", gap: 10, marginTop: 16, alignItems: "center" },
   ladderDot: { width: 11, height: 11, borderRadius: "50%", transition: "all .3s ease" },
+  archiveBtn: { fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, color: "#9c8a76", background: "transparent", border: "1px solid #4a3d31", borderRadius: 999, padding: "5px 12px", cursor: "pointer", whiteSpace: "nowrap", transition: "border-color .18s ease, color .18s ease" },
+  archiveRow: { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid #241d18" },
+  archiveThumb: { width: 56, height: 56, objectFit: "cover", borderRadius: 10, flex: "0 0 auto", cursor: "pointer", border: "1px solid #33291f" },
+  archiveAdd: { width: 56, height: 56, borderRadius: 10, flex: "0 0 auto", cursor: "pointer", border: "1px dashed #4a3d31", background: "rgba(242,207,91,0.04)", color: "#7a6d5e", fontSize: 18, padding: 0, transition: "border-color .18s ease" },
+  photoBtn: { fontFamily: "var(--font-ui)", fontSize: 11, fontWeight: 600, color: "#9c8a76", background: "rgba(242,207,91,0.05)", border: "1px dashed #4a3d31", borderRadius: 10, padding: "8px 10px", cursor: "pointer", width: "100%", transition: "border-color .18s ease, color .18s ease" },
+  photoThumbWrap: { position: "relative", borderRadius: 10, overflow: "hidden" },
+  photoThumb: { width: "100%", height: 96, objectFit: "cover", display: "block", borderRadius: 10, cursor: "pointer" },
+  photoChange: { position: "absolute", top: 6, right: 6, width: 26, height: 26, borderRadius: 999, border: "1px solid rgba(242,232,218,0.35)", background: "rgba(20,16,14,0.72)", color: "#f2e8da", fontSize: 13, cursor: "pointer", lineHeight: 1, padding: 0 },
+  journalThumb: { width: 40, height: 40, objectFit: "cover", borderRadius: 8, flex: "0 0 auto", cursor: "pointer", border: "1px solid #33291f" },
   defisSection: { marginBottom: 26 },
   defisHead: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, marginBottom: 12 },
   defisSub: { fontFamily: "var(--font-ui)", fontSize: 12, color: "#8f8070", marginTop: 3 },
